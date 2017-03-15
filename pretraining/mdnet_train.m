@@ -12,7 +12,7 @@ opts.batch_pos    = 32;
 opts.batch_neg    = 96;
 
 opts.numCycles    = 100 ;
-opts.useGpu       = false ;
+opts.useGpu       = true ;
 opts.conserveMemory = false ;
 
 opts.sync = true ;
@@ -99,7 +99,7 @@ for t=1:opts.numCycles
             batch = nextBatch;
         end
         [im, labels] = getBatch(roidb{seq_id}, batch, opts.batch_pos, opts.batch_neg) ;
-        
+        btime = toc(batch_time);
         if opts.useGpu
             im = gpuArray(im) ;
         end
@@ -109,7 +109,7 @@ for t=1:opts.numCycles
         res = mdnet_simplenn(net, im, seq_id, one, res, ...
             'conserveMemory', opts.conserveMemory, ...
             'sync', opts.sync) ;
-        
+        etime = toc(batch_time) - btime;
         % gradient step
         for l=1:numel(net.layers)
             if ~strcmp(net.layers{l}.type, 'conv'), continue ; end
@@ -132,6 +132,8 @@ for t=1:opts.numCycles
         
         % print information
         batch_time = toc(batch_time) ;
+        fprintf('batch_size: %d, batch_time %f, evalute time %f, gradient time %f ',...
+           numel(batch), btime, etime, batch_time-btime - etime);
         speed = opts.batchSize/batch_time ;
         info.train = updateError(info.train, t, seq_id, labels, res, batch_time) ;
         
