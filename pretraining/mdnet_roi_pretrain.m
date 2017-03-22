@@ -12,11 +12,11 @@ opts.seqsList  = {struct('dataset','vot2013','list','pretraining/seqList/vot13-o
     struct('dataset','vot2015','list','pretraining/seqList/vot15-otb.txt')};
 
 % The path to the initial network. 
-opts.netFile    = fullfile('models','mdnet_roi_init.mat') ;
-
+%opts.netFile    = fullfile('models','mdnet_roi_init.mat') ;
+opts.netFile = fullfile('data','bkp1','net-epoch-11.mat');
 % The path to the output MDNet model.
 opts.outFile     = fullfile('models','mdnet_roi_vot-otb_new.mat') ;
-
+opts.expDir      = 'models';
 % The directory to store the RoIs for training MDNet.
 opts.imdbDir     = fullfile('models','data_vot-otb') ;
 
@@ -33,10 +33,10 @@ opts.sampling.scale_factor      = 1.05;
 opts.sampling.flip              = false;
 
 % fast rcnn parameters
-opts.train.batchSize        = 8 ;
+opts.train.batchSize        = 2 ;
 
 opts.train.numEpochs        = 100 ; % #cycles (#iterations/#domains)
-opts.train.learningRate     = 0.0001 ; % x10 for fc4-6
+opts.train.learningRate     = 0.1*[0.001*ones(1,1); 0.00001*ones(50,1);0.000001*ones(49,1)] ; % x10 for fc4-6
 opts.train.gpus = [] ;
 opts.train.numSubBatches = 1 ;
 opts.train.prefetch = false ; % does not help for two images in a batch
@@ -65,7 +65,6 @@ end
 %% Initializing MDNet
 net = mdnet_roi_init_train(opts);
 
-
 %% Training MDNet
 % minibatch options
 bopts.useGpu = numel(opts.train.gpus) >  0 ;
@@ -85,14 +84,60 @@ bopts.prefetch = opts.train.prefetch;
                            getBatch(bopts,i,b), ...
                            opts.train) ;
 
-%% Save
-%net = mdnet_roi_finish_train(net);
-layers = net.layers;
+% --------------------------------------------------------------------
+%                                                               Deploy
+% --------------------------------------------------------------------
+modelPath = fullfile(opts.expDir, 'net-deployed.mat');
+if ~exist(modelPath,'file')
+  net = deployFRCNN(net,imdb);
+  net_ = net.saveobj() ;
+  save(modelPath, '-struct', 'net_') ;
+  clear net_ ;
+end
 
-genDir(fileparts(opts.outFile)) ;
-save(opts.outFile, 'layers') ;
+function net = deployFRCNN(net,imdb)
+% --------------------------------------------------------------------
+% function net = deployFRCNN(net)
+for l = numel(net.layers):-1:1
+  if isa(net.layers(l).block, 'dagnn.Loss') || ...
+      isa(net.layers(l).block, 'dagnn.DropOut')
+    layer = net.layers(l);
+    net.removeLayer(layer.name);
+    net.renameVar(layer.outputs{1}, layer.inputs{1}, 'quiet', true) ;
+  end
+end
 
+net.rebuild();
 
+pfc8 = net.getLayerIndex('predcls') ;
+net.addLayer('probcls',dagnn.SoftMax(),net.layers(pfc8).outputs{1},...
+  'probcls',{});
+
+net.vars(net.getVarIndex('probcls')).precious = true ;
+
+idxBox = net.getLayerIndex('predbbox') ;
+if ~isnan(idxBox)
+  net.vars(net.layers(idxBox).outputIndexes(1)).precious = true ;
+  % incorporate mean and std to bbox regression parameters
+  blayer = net.layers(idxBox) ;
+  filters = net.params(net.getParamIndex(blayer.params{1})).value ;
+  biases = net.params(net.getParamIndex(blayer.params{2})).value ;
+
+  boxMeans = single(imdb.boxes.bboxMeanStd{1}');
+  boxStds = single(imdb.boxes.bboxMeanStd{2}');
+
+  net.params(net.getParamIndex(blayer.params{1})).value = ...
+    bsxfun(@times,filters,...
+    reshape([boxStds(:)' zeros(1,4,'single')]',...
+    [1 1 1 8]));
+
+  biases = biases .* [boxStds(:)' zeros(1,4,'single')];
+
+  net.params(net.getParamIndex(blayer.params{2})).value = ...
+    bsxfun(@plus,biases, [boxMeans(:)' zeros(1,4,'single')]);
+end
+
+net.mode = 'test' ;
 
 % -------------------------------------------------------------------------
 function inputs = getBatch(opts, imdb, batch)
@@ -191,6 +236,7 @@ function [ net ] = mdnet_roi_init_train( opts )
 % --------------------f-----------------------------------------------------
 net = load(opts.netFile);
 net = net.net;
+net = dagnn.DagNN.loadobj(net);
 pFc6 = find(arrayfun(@(a) strcmp(a.name, 'predclsf'), net.params)==1);
 % domain-specific layers
 net.params(pFc6).value = 0.01 * randn(1,1,size(net.params(pFc6).value,3),2,'single');

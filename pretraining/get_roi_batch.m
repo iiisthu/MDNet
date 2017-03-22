@@ -8,6 +8,8 @@ function [imo, rois, labels, targets] = get_roi_batch(opts, imdb, batch, varargi
 %  
 %boxes = [pos_idx, pos_boxes; neg_idx, neg_boxes];
 opts.crop_size     = 107;
+opts.maxIn = 400;
+opts.minIn = 107;
 opts.crop_mode      = 'warp' ;
 opts.crop_padding   = 0 ;
 opts.numFetchThreads     = 1 ;
@@ -148,7 +150,7 @@ for b=1:numel(batch)
      end
      hold off;
   end 
-  [imre{b}, bboxes] = im_roi_crop(ims{b}, bbox, opts.crop_mode, opts.crop_size, opts.crop_padding);
+  [imre{b}, bboxes] = im_roi_crop(ims{b}, bbox, opts.crop_mode, opts.crop_size, opts.crop_padding,opts.minIn, opts.maxIn, []);
    if opts.visualize
      figure(2);
      imshow(uint8(imre{b}+128));
@@ -166,6 +168,7 @@ for b=1:numel(batch)
   maxH = max(maxH, size(imre{b},1));
   maxW = max(maxW, size(imre{b},2));
 end
+fprintf('[maxH, maxW]: [%d, %d]', round(maxH), round(maxW));
 imo = zeros(maxH,maxW,3,numel(batch),'single');
 for b=1:numel(batch)
     imt = imre{b};

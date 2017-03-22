@@ -9,7 +9,7 @@ if(isempty(gcp('nocreate')))
     parpool;
 end
 
-run matconvnet/matlab/vl_setupnn ;
+run matconvnet_ori/matlab/vl_setupnn ;
 
 addpath('pretraining');
 addpath('tracking');

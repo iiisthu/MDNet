@@ -1,5 +1,5 @@
 function [window, bboxes] = ...
-    im_roi_crop(im, bboxes, crop_mode, crop_size, padding, mean_rgb)
+    im_roi_crop(im, bboxes, crop_mode, crop_size, padding, minIn, maxIn, mean_rgb)
 % window = im_crop(im, bboxes, crop_mode, crop_size, padding, image_mean)
 %   Crops a window specified by bboxes (in [x1 y1 x2 y2] order) out of im.
 %
@@ -84,8 +84,8 @@ else % padding > 0 || square
     bboxes = round([center center] + ...
         [-half_width -half_height half_width half_height]);
 end
-minLw = min(bboxes(:,1));
-minLh = min(bboxes(:,2));
+minLw = min(max(1, bboxes(:,1)));
+minLh = min(max(1, bboxes(:,2)));
 maxRw = max(min(bboxes(:,3), size(im, 2)));
 maxRh = max(min(bboxes(:,4), size(im, 1)));
 
@@ -94,11 +94,13 @@ window = im(minLh:maxRh, minLw:maxRw, :);
 
 bboxes = [ bboxes(:,1) - minLw + 1, bboxes(:, 2) - minLh + 1, bboxes(:, 3) - minLw + 1, bboxes(:,4) - minLh + 1];
 
-
+twidth = maxRw - minLw + 1;
+theight = maxRh - minLh + 1;
 scale_h = mean((bboxes(:,4) - bboxes(:,2) + 1)./ crop_height);
 scale_w = mean((bboxes(:,3) - bboxes(:,1) + 1)./ crop_width);
 scale = min(scale_h, scale_w);
-tmp = imresize(window, [ round((maxRh - minLh + 1)* scale), round((maxRw - minLw + 1)* scale) ], 'bilinear', 'antialiasing', false);
+scale = max(min( scale, maxIn/max(twidth, theight)), minIn/min(twidth, theight) ); 
+tmp = imresize(window, [ round(theight * scale), round( twidth * scale) ], 'bilinear', 'antialiasing', false);
 
 tmp = single(tmp);
 
