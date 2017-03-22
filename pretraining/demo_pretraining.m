@@ -6,9 +6,6 @@
 %
 
 clear;
-run(fullfile(fileparts(mfilename('fullpath')), ...
-  '..', 'matconvnet','matlab', 'vl_setupnn.m'))
-
 % Prepare a CNN model for learning MDNet.
 mdnet_prepare_model;
 

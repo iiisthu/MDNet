@@ -31,7 +31,7 @@ opts.sampling.posPerFrame       = 50;
 opts.sampling.negPerFrame       = 200;
 opts.sampling.scale_factor      = 1.05;
 opts.sampling.flip              = false;
-
+opts.sampling.val_ratio         = 0.9;
 % fast rcnn parameters
 opts.train.batchSize        = 2 ;
 
@@ -80,8 +80,8 @@ bopts.numThreads = opts.numFetchThreads;
 bopts.prefetch = opts.train.prefetch;
 
 
-[net,info] = cnn_train_dag(net, imdb, @(i,b) ...
-                           getBatch(bopts,i,b), ...
+[net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
+                           getBatch(bopts,i,k,b), ...
                            opts.train) ;
 
 % --------------------------------------------------------------------
@@ -140,14 +140,14 @@ end
 net.mode = 'test' ;
 
 % -------------------------------------------------------------------------
-function inputs = getBatch(opts, imdb, batch)
+function inputs = getBatch(opts, imdb, k,  batch)
 % -------------------------------------------------------------------------
 if isempty(batch)
   return;
 end
 opts.batch_pos        = floor(opts.batch_pos/numel(batch));
 opts.batch_neg        = floor(opts.batch_neg/numel(batch));
-[im,rois,labels,btargets] = get_roi_batch(opts, imdb, batch);
+[im,rois,labels,btargets] = get_roi_batch(opts, imdb, k, batch);
 nb = numel(labels);
 nc = 2;
 if opts.piecewise
@@ -193,8 +193,8 @@ function imdb = mdnet_roi_setup_data(seqList, opts)
 % -------------------------------------------------------------------------
 
 imdb.images.name = {};
-imdb.images.size = [];
-imdb.images.set = [];
+imdb.images.size = {};
+imdb.images.set = {};
 imdb.boxes.gtbox = {};
 imdb.boxes.gtlabel = {};
 %imdb.boxes.pgtidx = {};
@@ -214,14 +214,14 @@ for D = 1:length(seqList)
         
         config = genConfig(dataset, seq);
         imdb_ = roi_seq2roidb(config, opts);
-    	imdb.images.name = vertcat(imdb.images.name, imdb_.images.name);
-    	imdb.images.size = vertcat(imdb.images.size, imdb_.images.size);
-    	imdb.images.set = vertcat(imdb.images.set, imdb_.images.set);
-    	imdb.boxes.gtbox = vertcat(imdb.boxes.gtbox, imdb_.boxes.gtbox);
-    	imdb.boxes.gtlabel = vertcat(imdb.boxes.gtlabel, imdb_.boxes.gtlabel);
-    	imdb.boxes.pbox = vertcat(imdb.boxes.pbox, imdb_.boxes.pbox);
-    	imdb.boxes.plabel = vertcat(imdb.boxes.plabel, imdb_.boxes.plabel);
-    	imdb.boxes.piou = vertcat(imdb.boxes.piou, imdb_.boxes.piou);
+    	imdb.images.name{i} = imdb_.images.name;
+    	imdb.images.size{i} = imdb_.images.size;
+    	imdb.images.set{i} =  imdb_.images.set;
+    	imdb.boxes.gtbox{i} = imdb_.boxes.gtbox;
+    	imdb.boxes.gtlabel{i} = imdb_.boxes.gtlabel;
+    	imdb.boxes.pbox{i} = imdb_.boxes.pbox;
+    	imdb.boxes.plabel{i} = imdb_.boxes.plabel;
+    	imdb.boxes.piou{i} =imdb_.boxes.piou;
 %        imdb.boxes.pgtidx = vertcat(imdb.boxes.pgtidx, imdb_.boxes.pgtidx);
     end
     imdb = add_bboxreg_targets(imdb);
@@ -237,6 +237,27 @@ function [ net ] = mdnet_roi_init_train( opts )
 net = load(opts.netFile);
 net = net.net;
 net = dagnn.DagNN.loadobj(net);
+pfc4 = find((arrayfun(@(a) strcmp(a.name, 'fc4f'), net.params)==1));
+for i = 1:numel(net.params)
+   if mod(i, 2) == 1
+     net.params(i).weightDecay = 1;
+     net.params(i).learningRate = 1;
+  else
+     net.params(i).weightDecay = 0;
+     net.params(i).learningRate = 2;
+  end
+  
+end
+for i=pfc4:numel(net.params) - 4
+  if mod(i-pfc4, 2) == 0
+     net.params(i).weightDecay = 1;
+     net.params(i).learningRate = 10;
+  else
+     net.params(i).weightDecay = 0;
+     net.params(i).learningRate = 20;
+  end
+end
+
 pFc6 = find(arrayfun(@(a) strcmp(a.name, 'predclsf'), net.params)==1);
 % domain-specific layers
 net.params(pFc6).value = 0.01 * randn(1,1,size(net.params(pFc6).value,3),2,'single');
@@ -251,31 +272,6 @@ net.params(ppredbbox+1).value = zeros(1, 8, 'single');
 end
 
 
-
-% -------------------------------------------------------------------------
-function [ net ] = mdnet_roi_finish_train( net )
-% -------------------------------------------------------------------------
-net.layers = net.layers(1:end-2);
-for i=1:numel(net.layers)
-    switch (net.layers{i}.type)
-        case 'conv'
-            net.layers{i}.filtersLearningRate = 1;
-            net.layers{i}.biasesLearningRate = 2;
-    end
-end
-
-% new domain-specific layer
-net.layers{end+1} = struct('type', 'conv', ...
-    'name', 'fc6', ...
-    'filters', 0.01 * randn(1,1,512,2,'single'), ...
-    'biases', zeros(1, 2, 'single'), ...
-    'stride', 1, ...
-    'pad', 0, ...
-    'filtersLearningRate', 10, ...
-    'biasesLearningRate', 20, ...
-    'filtersWeightDecay', 1, ...
-    'biasesWeightDecay', 0) ;
-net.layers{end+1} = struct('type', 'softmaxloss', 'name', 'loss') ;
 
 
 
@@ -293,22 +289,23 @@ imdb.boxes.ptarget = cell(numel(imdb.images.name),1);
 
 count = 1;
 % add targets
-for i=1:numel(imdb.images.name)
-
-  targets = zeros(numel(imdb.boxes.plabel{i}),4);
-  pos = (imdb.boxes.plabel{i} ~= bgid);
+for k=1:numel(imdb.images.name)
+  for i = 1:numel(imdb.images.name{k})
+  targets = zeros(numel(imdb.boxes.plabel{k}{i}),4);
+  pos = (imdb.boxes.plabel{k}{i} ~= bgid);
   if isempty(pos)
     fprintf('no pos found (%d)\n',count);
     count = count + 1;
     continue;
   end
 
-  ex_rois = imdb.boxes.pbox{i}(pos,:) ;
-  gt_rois = repmat(imdb.boxes.gtbox{i}, sum(pos), 1);
+  ex_rois = imdb.boxes.pbox{k}{i}(pos,:) ;
+  gt_rois = repmat(imdb.boxes.gtbox{k}{i}, sum(pos), 1);
 
   targets(pos,:) = bbox_transform(ex_rois, gt_rois);
 
-  imdb.boxes.ptarget{i} = targets;
+  imdb.boxes.ptarget{k}{i} = targets;
+  end
 end
 
 % compute means and stddevs
@@ -317,16 +314,18 @@ if ~isfield(imdb.boxes,'bboxMeanStd') || isempty(imdb.boxes.bboxMeanStd)
   sums = zeros(1,4);
   squared_sums = zeros(1,4);
   class_counts = eps;
-  for i=1:numel(imdb.boxes.ptarget)
-      pos =  (imdb.boxes.plabel{i}>0) ;
-      labels = imdb.boxes.plabel{i}(pos);
-      targets = imdb.boxes.ptarget{i}(pos,:);
+  for k=1:numel(imdb.boxes.ptarget)
+    for i=1:numel(imdb.boxes.ptarget{k})
+      pos =  (imdb.boxes.plabel{k}{i}>0) ;
+      labels = imdb.boxes.plabel{k}{i}(pos);
+      targets = imdb.boxes.ptarget{k}{i}(pos,:);
       cls_inds = (labels~=bgid);
       if sum(cls_inds)>0
          class_counts = class_counts + sum(cls_inds);
          sums = sums + sum(targets(cls_inds,:));
          squared_sums = squared_sums + sum(targets(cls_inds,:).^2);
       end
+    end
   end
   means = bsxfun(@rdivide,sums,class_counts);
   stds = sqrt(bsxfun(@rdivide,squared_sums,class_counts) - means.^2);
@@ -343,16 +342,17 @@ else
 end
 
 % normalize targets
-for i=1:numel(imdb.boxes.ptarget)
+for k=1:numel(imdb.boxes.ptarget)
+    for i=1:numel(imdb.boxes.ptarget{k})
 %   if imdb.images.set(i)<3
-    pos = (imdb.boxes.plabel{i} ~= bgid);
-    labels = imdb.boxes.plabel{i}(pos);
-    targets = imdb.boxes.ptarget{i}(pos,:);
+    pos = (imdb.boxes.plabel{k}{i} ~= bgid);
+    labels = imdb.boxes.plabel{k}{i}(pos);
+    targets = imdb.boxes.ptarget{k}{i}(pos,:);
       cls_inds = (labels~=bgid);
       if sum(cls_inds)>0
         targets(cls_inds,:) = bsxfun(@minus,targets(cls_inds,:),means);
         targets(cls_inds,:) = bsxfun(@rdivide,targets(cls_inds,:), stds);
       end
-    imdb.boxes.ptarget{i}(pos,:) = targets;
-%   end
+    imdb.boxes.ptarget{k}{i}(pos,:) = targets;
+   end
 end

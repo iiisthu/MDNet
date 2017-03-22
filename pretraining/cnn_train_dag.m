@@ -13,11 +13,12 @@ opts.expDir = fullfile('data','exp') ;
 opts.continue = true ;
 opts.batchSize = 256 ;
 opts.numSubBatches = 1 ;
-opts.train = [] ;
-opts.val = [] ;
+opts.train = {} ;
+opts.val = {} ;
 opts.gpus = [] ;
 opts.prefetch = false ;
 opts.numEpochs = 300 ;
+opts.numCycles = 400;
 opts.learningRate = 0.001 ;
 opts.weightDecay = 0.0005 ;
 opts.momentum = 0.9 ;
@@ -34,10 +35,14 @@ opts.plotStatistics = true;
 opts = vl_argparse(opts, varargin) ;
 
 if ~exist(opts.expDir, 'dir'), mkdir(opts.expDir) ; end
-if isempty(opts.train), opts.train = find(imdb.images.set==1) ; end
-if isempty(opts.val), opts.val = find(imdb.images.set==2) ; end
-if isnan(opts.train), opts.train = [] ; end
-if isnan(opts.val), opts.val = [] ; end
+if numel(opts.train) == 0
+    opts.train = cell(numel(imdb.images.set), 1);
+    opts.val = cell(numel(imdb.images.set), 1);
+    for k = 1:numel(imdb.images.set)
+        opts.train{k} = find(imdb.images.set{k}==1) ; 
+        opts.val{k} = find(imdb.images.set{k} == 2);
+    end
+end
 
 % -------------------------------------------------------------------------
 %                                                            Initialization
@@ -78,10 +83,11 @@ for epoch=start+1:opts.numEpochs
   params = opts ;
   params.epoch = epoch ;
   params.learningRate = opts.learningRate(min(epoch, numel(opts.learningRate))) ;
-  params.train = opts.train(randperm(numel(opts.train))) ; % shuffle
-  params.val = opts.val(randperm(numel(opts.val))) ;
+  params.train = opts.train; % not shuffled yet
+  params.val = opts.val ;
   params.imdb = imdb ;
   params.getBatch = getBatch ;
+  params.frame_list = {};
 
   if numel(opts.gpus) <= 1
     [net, state] = processEpoch(net, state, params, 'train') ;
@@ -178,16 +184,33 @@ end
 
 num = 0 ;
 epoch = params.epoch ;
-subset = params.(mode) ;
 adjustTime = 0 ;
 
 stats.num = 0 ; % return something even if subset = []
 stats.time = 0 ;
 
+
+% shuffle the frames for training
+nFrames = 0;
+if numel(params.frame_list) == 0
+params.frame_list = cell(numel(params.train),1);
+for k=1:numel(params.train)
+    nFrames = params.batchSize*params.numCycles;
+    while(length(params.frame_list{k})<nFrames)
+        params.frame_list{k} = cat(1,params.frame_list{k},uint32(randperm(length(params.train{k})))');
+    end
+    params.frame_list{k} = params.frame_list{k}(1:nFrames);
+end
+end
+
+
+
 start = tic ;
-for t=1:params.batchSize:numel(subset)
-   start = tic ; 
-  fprintf('%s: epoch %02d: %3d/%3d:', mode, epoch, ...
+for t = 1:params.batchSize:nFrames
+for k = 1:numel(params.frame_list)
+  subset = params.frame_list{k};
+  start = tic ; 
+  fprintf('%s: epoch %02d: seq %02d: %3d/%3d:', mode, epoch, k, ...
           fix((t-1)/params.batchSize)+1, ceil(numel(subset)/params.batchSize)) ;
   batchSize = min(params.batchSize, numel(subset) - t + 1) ;
 
@@ -199,7 +222,7 @@ for t=1:params.batchSize:numel(subset)
     num = num + numel(batch) ;
     if numel(batch) == 0, continue ; end
 
-    inputs = params.getBatch(params.imdb, batch) ;
+    inputs = params.getBatch(params.imdb, k, batch) ;
 
     if params.prefetch
       if s == params.numSubBatches
@@ -209,7 +232,7 @@ for t=1:params.batchSize:numel(subset)
         batchStart = batchStart + numlabs ;
       end
       nextBatch = subset(batchStart : params.numSubBatches * numlabs : batchEnd) ;
-      params.getBatch(params.imdb, nextBatch) ;
+      params.getBatch(params.imdb, k,  nextBatch) ;
     end
     btime = toc(start);
     if strcmp(mode, 'train')
@@ -252,6 +275,7 @@ for t=1:params.batchSize:numel(subset)
     fprintf(' %s: %.3f', f, stats.(f)) ;
   end
   fprintf('\n') ;
+end
 end
 
 % Save back to state.

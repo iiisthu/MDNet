@@ -38,6 +38,9 @@ for i=1:length(imgs)
     boxes.gtbox{i} =  gts(i,:);
     boxes.gtlabel{i} =  fglabel;
     pos_examples = [targetLoc];
+    if i >= opts.val_ratio* length(imgs)
+	images.set(i) = 2;
+    end
     piou = [1];
     while(size(pos_examples,1)<opts.posPerFrame-1)
         pos = genSamples(targetLoc, opts.posPerFrame*5,...

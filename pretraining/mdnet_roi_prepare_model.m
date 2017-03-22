@@ -117,16 +117,6 @@ if opts.piecewise
 end
 
 net.rebuild();
-pfc4 = find((arrayfun(@(a) strcmp(a.name, 'fc4f'), net.params)==1));
-for i=pfc4:numel(net.params)
-  if mod(i-pfc4, 2) == 0
-     net.params(i).weightDecay = 1;
-     net.params(i).learningRate = 1;
-  else
-     net.params(i).weightDecay = 0;
-     net.params(i).learningRate = 2;
-  end
-end
 net.meta.normalization.interpolation = 'bilinear';
 clear layers;
 save(dst_model,'net');

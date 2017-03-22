@@ -1,4 +1,4 @@
-function [imo, rois, labels, targets] = get_roi_batch(opts, imdb, batch, varargin)
+function [imo, rois, labels, targets] = get_roi_batch(opts, imdb, k, batch, varargin)
 % GET_BATCH
 % Load, preprocess, and pack images for CNN evaluation
 %
@@ -18,14 +18,12 @@ opts.batch_pos        = floor(32/numel(batch));
 opts.batch_neg        = floor(96/numel(batch));
 opts = vl_argparse(opts, varargin);
 opts.visualize = 0;
-opts.scale = 600;
-opts.maxScale = 1000;
-images = imdb.images.name(batch); 
+images = {imdb.images.name{k}{batch}}; 
 
 im = cell(1, numel(images)) ;
 % fetch is true if images is a list of filenames (instead of
 % a cell array of images)
-fetch = ischar(imdb.images.name{1}) ;
+fetch = ischar(imdb.images.name{k}{1}) ;
 
 % prefetch is used to load images in a separate thread
 prefetch = fetch & opts.prefetch ;
@@ -60,9 +58,9 @@ plabels  = cell(1,numel(batch));
 ptargets = cell(1,numel(batch));
 % get fg and bg rois
 for b=1:numel(batch)
-  pbox   = imdb.boxes.pbox{batch(b)};
-  plabel = imdb.boxes.plabel{batch(b)};
-  ptarget = imdb.boxes.ptarget{batch(b)};
+  pbox   = imdb.boxes.pbox{k}{batch(b)};
+  plabel = imdb.boxes.plabel{k}{batch(b)};
+  ptarget = imdb.boxes.ptarget{k}{batch(b)};
 
   if size(pbox,2)~=4
     error('wrong box size');
