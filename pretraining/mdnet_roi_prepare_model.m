@@ -13,7 +13,7 @@ function mdnet_roi_prepare_model()
 src_model = './models/imagenet-vgg-m-conv1-3.mat';
 % output network 
 dst_model = './models/mdnet_roi_init.mat';
-opts.piecewise = 1;
+opts.piecewise = 0;
 if exist(dst_model,'file')
     return;
 end

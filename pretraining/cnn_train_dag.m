@@ -321,6 +321,9 @@ for p=1:numel(net.params)
           (thisLR/batchSize/net.params(p).fanout),  parDer) ;
 
     case 'gradient'
+      if isempty(parDer)
+          continue;
+      end
       thisDecay = params.weightDecay * net.params(p).weightDecay ;
       thisLR = params.learningRate * net.params(p).learningRate ;
 

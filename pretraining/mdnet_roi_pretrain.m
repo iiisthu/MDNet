@@ -42,7 +42,7 @@ opts.train.numSubBatches = 1 ;
 opts.train.prefetch = false ; % does not help for two images in a batch
 opts.train.weightDecay = 0.0005 ;
 
-opts.piecewise = 1;
+opts.piecewise = 0;
 
 opts.numFetchThreads = 2 ;
 opts.train.numEpochs = numel(opts.train.learningRate) ;
@@ -58,7 +58,7 @@ else
     save(opts.imdbPath, 'imdb') ;
 end
 if opts.piecewise 
-opts.train.derOutputs = {'losscls', 1, 'lossbbox', 1} ;
+opts.train.derOutputs = {'losscls', 2, 'lossbbox', 1} ;
 else
 opts.train.derOutputs = {'losscls', 1} ;
 end
@@ -73,7 +73,7 @@ bopts.scale = 600;
 bopts.batch_pos        = 32;
 bopts.batch_neg        = 96;
 bopts.bgLabel = 1;
-bopts.piecewise = 1;
+bopts.piecewise = opts.piecewise;
 bopts.visualize = 0;
 bopts.interpolation = net.meta.normalization.interpolation;
 bopts.numThreads = opts.numFetchThreads;
