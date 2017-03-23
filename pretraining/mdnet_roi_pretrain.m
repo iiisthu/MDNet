@@ -12,8 +12,8 @@ opts.seqsList  = {struct('dataset','vot2013','list','pretraining/seqList/vot13-o
     struct('dataset','vot2015','list','pretraining/seqList/vot15-otb.txt')};
 
 % The path to the initial network. 
-%opts.netFile    = fullfile('models','mdnet_roi_init.mat') ;
-opts.netFile = fullfile('data','bkp1','net-epoch-11.mat');
+opts.netFile    = fullfile('models','mdnet_roi_init_piecewise.mat') ;
+%opts.netFile = fullfile('data','bkp1','net-epoch-11.mat');
 % The path to the output MDNet model.
 opts.outFile     = fullfile('models','mdnet_roi_vot-otb_new.mat') ;
 opts.expDir      = 'models';
@@ -36,13 +36,13 @@ opts.sampling.val_ratio         = 0.9;
 opts.train.batchSize        = 2 ;
 
 opts.train.numEpochs        = 100 ; % #cycles (#iterations/#domains)
-opts.train.learningRate     = 0.1*[0.001*ones(1,1); 0.00001*ones(50,1);0.000001*ones(49,1)] ; % x10 for fc4-6
+opts.train.learningRate     = 0.01*[0.001*ones(1,1); 0.00001*ones(50,1);0.000001*ones(49,1)] ; % x10 for fc4-6
 opts.train.gpus = [] ;
 opts.train.numSubBatches = 1 ;
 opts.train.prefetch = false ; % does not help for two images in a batch
 opts.train.weightDecay = 0.0005 ;
-
-opts.piecewise = 0;
+opts.train.expDir = fullfile('data','exp_piecewise') ;
+opts.piecewise = 1;
 
 opts.numFetchThreads = 2 ;
 opts.train.numEpochs = numel(opts.train.learningRate) ;
@@ -58,7 +58,7 @@ else
     save(opts.imdbPath, 'imdb') ;
 end
 if opts.piecewise 
-opts.train.derOutputs = {'losscls', 2, 'lossbbox', 1} ;
+opts.train.derOutputs = {'losscls', 1, 'lossbbox', 1} ;
 else
 opts.train.derOutputs = {'losscls', 1} ;
 end

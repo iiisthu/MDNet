@@ -243,6 +243,7 @@ for k = 1:numel(params.frame_list)
     else
       net.mode = 'test' ;
       net.eval(inputs) ;
+      etime = toc(start) - btime;
     end
   end
 
