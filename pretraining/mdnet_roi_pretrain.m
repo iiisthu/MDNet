@@ -33,11 +33,11 @@ opts.sampling.scale_factor      = 1.05;
 opts.sampling.flip              = false;
 opts.sampling.val_ratio         = 0.9;
 % fast rcnn parameters
-opts.train.batchSize        = 2 ;
+opts.train.batchSize        = 4 ;
 
 opts.train.numEpochs        = 100 ; % #cycles (#iterations/#domains)
 opts.train.learningRate     = 0.01*[0.001*ones(1,1); 0.00001*ones(50,1);0.000001*ones(49,1)] ; % x10 for fc4-6
-opts.train.gpus = [] ;
+opts.train.gpus = [1,3,7] ;
 opts.train.numSubBatches = 1 ;
 opts.train.prefetch = false ; % does not help for two images in a batch
 opts.train.weightDecay = 0.0005 ;
@@ -63,7 +63,8 @@ else
 opts.train.derOutputs = {'losscls', 1} ;
 end
 %% Initializing MDNet
-net = mdnet_roi_init_train(opts);
+K = numel(imdb.images.name);
+net = mdnet_roi_init_train(opts, K);
 
 %% Training MDNet
 % minibatch options
@@ -179,10 +180,10 @@ end
 %
 
 if opts.piecewise
-inputs = {'input', im, 'label', labels, 'rois', rois, 'targets', targets, ...
+inputs = {'input', im, 'label', labels, 'domain', k, 'rois', rois, 'targets', targets, ...
   'instance_weights', instance_weights} ;
 else
-inputs = {'input', im, 'label', labels, 'rois', rois} ;
+inputs = {'input', im, 'label', labels, 'domain', k, 'rois', rois} ;
 
 end
 
@@ -232,7 +233,7 @@ end
 
 
 % -------------------------------------------------------------------------
-function [ net ] = mdnet_roi_init_train( opts )
+function [ net ] = mdnet_roi_init_train( opts, K )
 % --------------------f-----------------------------------------------------
 net = load(opts.netFile);
 net = net.net;
@@ -260,8 +261,13 @@ end
 
 pFc6 = find(arrayfun(@(a) strcmp(a.name, 'predclsf'), net.params)==1);
 % domain-specific layers
-net.params(pFc6).value = 0.01 * randn(1,1,size(net.params(pFc6).value,3),2,'single');
-net.params(pFc6+1).value = zeros(1, 2, 'single');
+net.params(pFc6).value = 0.01 * randn(1,1,size(net.params(pFc6).value,3),2*K,'single');
+net.params(pFc6+1).value = zeros(1, 2*K, 'single');
+
+ploss = find(arrayfun(@(a) strcmp(a.name, 'loss'), net.layers) == 1);
+net.setLayerInputs('loss', { net.layers(ploss).inputs{1}, net.layers(ploss).inputs{2},'domain' });
+net.layers(ploss).block = dagnn.MultiDomainLoss(); 
+net.layers(ploss).block.attach(net, ploss) ;
 
 if opts.piecewise
 ppredbbox = find(arrayfun(@(a) strcmp(a.name, 'predbboxf'), net.params)==1);
@@ -271,7 +277,7 @@ net.params(ppredbbox+1).value = zeros(1, 8, 'single');
 
 end
 
-
+net.rebuild();
 
 
 
