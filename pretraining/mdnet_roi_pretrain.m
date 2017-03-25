@@ -35,14 +35,14 @@ opts.sampling.val_ratio         = 0.9;
 % fast rcnn parameters
 opts.train.batchSize        = 4 ;
 
-opts.train.numEpochs        = 100 ; % #cycles (#iterations/#domains)
-opts.train.learningRate     = 0.01*[0.001*ones(1,1); 0.00001*ones(50,1);0.000001*ones(49,1)] ; % x10 for fc4-6
-opts.train.gpus = [1,3,7] ;
+opts.train.numEpochs        = 20 ; % #cycles (#iterations/#domains)
+opts.train.learningRate     = 0.01*[0.001*ones(5,1); 0.0001*ones(10,1);0.0001*ones(5,1)] ; % x10 for fc4-6
+opts.train.gpus = [3,7] ;
 opts.train.numSubBatches = 1 ;
 opts.train.prefetch = false ; % does not help for two images in a batch
 opts.train.weightDecay = 0.0005 ;
-opts.train.expDir = fullfile('data','exp_piecewise') ;
-opts.piecewise = 1;
+opts.train.expDir = fullfile('data','exp') ;
+opts.piecewise = 0;
 
 opts.numFetchThreads = 2 ;
 opts.train.numEpochs = numel(opts.train.learningRate) ;
@@ -162,14 +162,16 @@ for b=1:nb
     instance_weights(1,1,4*(labels(b)-1)+1:4*labels(b),b) = 1;
   end
 end
+if opts.useGpu > 0
+  targets = gpuArray(targets) ;
+  instance_weights = gpuArray(instance_weights) ;
+end
 end
 rois = single(rois);
 
 if opts.useGpu > 0
   im = gpuArray(im) ;
   rois = gpuArray(rois) ;
-  targets = gpuArray(targets) ;
-  instance_weights = gpuArray(instance_weights) ;
 end
 %if(nargout > 0 && opts.flip)
 %    flip_idx = find(randi([0 1],size(boxes,1),1));

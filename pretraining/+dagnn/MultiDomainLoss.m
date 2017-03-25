@@ -38,7 +38,7 @@ classdef MultiDomainLoss < dagnn.Loss
       if isa(x,'gpuArray')
           der = gpuArray.zeros(size(inputs{1}), classUnderlying(inputs{1}));
       else
-          der = zeros(size(inputs{1}), classUnderlying(inputs{1}));
+          der = zeros(size(inputs{1}), 'single');
       end
       der(:,:, 2*K-1:2*K, :)  = x; 
       derInputs{1} = der;
