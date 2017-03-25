@@ -96,8 +96,8 @@ bboxes = [ bboxes(:,1) - minLw + 1, bboxes(:, 2) - minLh + 1, bboxes(:, 3) - min
 
 twidth = maxRw - minLw + 1;
 theight = maxRh - minLh + 1;
-scale_h = mean((bboxes(:,4) - bboxes(:,2) + 1)./ crop_height);
-scale_w = mean((bboxes(:,3) - bboxes(:,1) + 1)./ crop_width);
+scale_h = mean(crop_height ./(bboxes(:,4) - bboxes(:,2) + 1));
+scale_w = mean(crop_width ./(bboxes(:,3) - bboxes(:,1) + 1));
 scale = min(scale_h, scale_w);
 scale = max(min( scale, maxIn/max(twidth, theight)), minIn/min(twidth, theight) ); 
 tmp = imresize(window, [ round(theight * scale), round( twidth * scale) ], 'bilinear', 'antialiasing', false);

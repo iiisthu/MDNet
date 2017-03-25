@@ -12,8 +12,8 @@ function mdnet_roi_prepare_model()
 % conv1-3 layers from VGG-M network pretrained on ImageNet
 src_model = './models/imagenet-vgg-m-conv1-3.mat';
 % output network 
-dst_model = './models/mdnet_roi_init.mat';
-opts.piecewise = 0;
+dst_model = './models/mdnet_roi_init_pw.mat';
+opts.piecewise = 1;
 if exist(dst_model,'file')
     return;
 end

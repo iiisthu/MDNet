@@ -17,7 +17,6 @@ opts.prefetch = false;
 opts.batch_pos        = floor(32/numel(batch));
 opts.batch_neg        = floor(96/numel(batch));
 opts = vl_argparse(opts, varargin);
-opts.visualize = 0;
 images = {imdb.images.name{k}{batch}}; 
 
 im = cell(1, numel(images)) ;
@@ -159,6 +158,7 @@ for b=1:numel(batch)
         hold on;
         end
      end
+     fprintf('Input size: [%d,%d] [%d, %d]\n', size(imre{b},1), size(imre{b},2), round(bboxes(1, 3)), round(bboxes(1,4)));
      hold off;
   end 
   nB = size(bboxes,1);

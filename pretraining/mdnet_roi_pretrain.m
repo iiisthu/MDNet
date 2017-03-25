@@ -12,7 +12,7 @@ opts.seqsList  = {struct('dataset','vot2013','list','pretraining/seqList/vot13-o
     struct('dataset','vot2015','list','pretraining/seqList/vot15-otb.txt')};
 
 % The path to the initial network. 
-opts.netFile    = fullfile('models','mdnet_roi_init_piecewise.mat') ;
+opts.netFile    = fullfile('models','mdnet_roi_init_pw.mat') ;
 %opts.netFile = fullfile('data','bkp1','net-epoch-11.mat');
 % The path to the output MDNet model.
 opts.outFile     = fullfile('models','mdnet_roi_vot-otb_new.mat') ;
@@ -24,14 +24,13 @@ opts.sampling.crop_mode         = 'warp';
 opts.sampling.numFetchThreads   = 8 ;
 opts.sampling.posRange          = [0.7 1];
 opts.sampling.negRange          = [0 0.5];
-opts.sampling.input_size        = 107;
 opts.sampling.crop_padding      = 16;
 
 opts.sampling.posPerFrame       = 50;
 opts.sampling.negPerFrame       = 200;
 opts.sampling.scale_factor      = 1.05;
 opts.sampling.flip              = false;
-opts.sampling.val_ratio         = 0.9;
+opts.sampling.val_ratio         = 0.95;
 % fast rcnn parameters
 opts.train.batchSize        = 4 ;
 
@@ -41,8 +40,8 @@ opts.train.gpus = [3,7] ;
 opts.train.numSubBatches = 1 ;
 opts.train.prefetch = false ; % does not help for two images in a batch
 opts.train.weightDecay = 0.0005 ;
-opts.train.expDir = fullfile('data','exp') ;
-opts.piecewise = 0;
+opts.train.expDir = fullfile('data','exp_val005_pw_ubbox') ;
+opts.piecewise = 1;
 
 opts.numFetchThreads = 2 ;
 opts.train.numEpochs = numel(opts.train.learningRate) ;
@@ -68,11 +67,11 @@ net = mdnet_roi_init_train(opts, K);
 
 %% Training MDNet
 % minibatch options
-bopts.useGpu = numel(opts.train.gpus) >  0 ;
-bopts.maxScale = 1000;
-bopts.scale = 600;
+bopts.gpus             = opts.train.gpus
 bopts.batch_pos        = 32;
 bopts.batch_neg        = 96;
+bopts.maxIn = 400;
+bopts.minIn = 107;
 bopts.bgLabel = 1;
 bopts.piecewise = opts.piecewise;
 bopts.visualize = 0;
@@ -146,9 +145,7 @@ function inputs = getBatch(opts, imdb, k,  batch)
 if isempty(batch)
   return;
 end
-opts.batch_pos        = floor(opts.batch_pos/numel(batch));
-opts.batch_neg        = floor(opts.batch_neg/numel(batch));
-[im,rois,labels,btargets] = get_roi_batch(opts, imdb, k, batch);
+[im,rois,labels,btargets] = get_roi_batch(opts, imdb, k, batch, 'maxIn', opts.maxIn, 'minIn', opts.minIn);
 nb = numel(labels);
 nc = 2;
 if opts.piecewise
@@ -162,14 +159,14 @@ for b=1:nb
     instance_weights(1,1,4*(labels(b)-1)+1:4*labels(b),b) = 1;
   end
 end
-if opts.useGpu > 0
+if numel(opts.gpus) > 0
   targets = gpuArray(targets) ;
   instance_weights = gpuArray(instance_weights) ;
 end
 end
 rois = single(rois);
 
-if opts.useGpu > 0
+if numel(opts.gpus) > 0
   im = gpuArray(im) ;
   rois = gpuArray(rois) ;
 end
