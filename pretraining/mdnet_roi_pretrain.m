@@ -13,13 +13,15 @@ opts.seqsList  = {struct('dataset','vot2013','list','pretraining/seqList/vot13-o
 
 % The path to the initial network. 
 opts.netFile    = fullfile('models','mdnet_roi_init_pw.mat') ;
+
 %opts.netFile = fullfile('data','bkp1','net-epoch-11.mat');
 % The path to the output MDNet model.
-opts.outFile     = fullfile('models','mdnet_roi_vot-otb_new.mat') ;
 opts.expDir      = 'models';
+opts.modelPath = fullfile(opts.expDir, 'net-deployed_shared_bbox.mat');
+
 % The directory to store the RoIs for training MDNet.
 opts.imdbDir     = fullfile('models','data_vot-otb') ;
-
+opts.expDirName  =  'exp';
 opts.sampling.crop_mode         = 'warp';
 opts.sampling.numFetchThreads   = 8 ;
 opts.sampling.posRange          = [0.7 1];
@@ -35,17 +37,19 @@ opts.sampling.val_ratio         = 0.95;
 opts.train.batchSize        = 4 ;
 
 opts.train.numEpochs        = 20 ; % #cycles (#iterations/#domains)
-opts.train.learningRate     = 0.01*[0.001*ones(5,1); 0.0001*ones(10,1);0.0001*ones(5,1)] ; % x10 for fc4-6
-opts.train.gpus = [3,7] ;
+opts.train.learningRate     = 0.01*[0.001*ones(5,1); 0.0001*ones(5,1);0.0001*ones(5,1)] ; % x10 for fc4-6
+opts.train.gpus = [1,2] ;
 opts.train.numSubBatches = 1 ;
 opts.train.prefetch = false ; % does not help for two images in a batch
 opts.train.weightDecay = 0.0005 ;
-opts.train.expDir = fullfile('data','exp_val005_pw_ubbox') ;
 opts.piecewise = 1;
-
+opts.domain_bbox = 1;
 opts.numFetchThreads = 2 ;
 opts.train.numEpochs = numel(opts.train.learningRate) ;
 opts = vl_argparse(opts, varargin) ;
+
+
+opts.train.expDir = fullfile('data', opts.expDirName);
 opts.imdbPath  = fullfile(opts.imdbDir, 'roi_imdb.mat');
 genDir(opts.imdbDir) ;
 
@@ -64,10 +68,13 @@ end
 %% Initializing MDNet
 K = numel(imdb.images.name);
 net = mdnet_roi_init_train(opts, K);
+% net = load(opts.netFile);
+% net = net.net;
+% net = dagnn.DagNN.loadobj(net);
 
 %% Training MDNet
 % minibatch options
-bopts.gpus             = opts.train.gpus
+bopts.gpus             = opts.train.gpus;
 bopts.batch_pos        = 32;
 bopts.batch_neg        = 96;
 bopts.maxIn = 400;
@@ -87,11 +94,10 @@ bopts.prefetch = opts.train.prefetch;
 % --------------------------------------------------------------------
 %                                                               Deploy
 % --------------------------------------------------------------------
-modelPath = fullfile(opts.expDir, 'net-deployed.mat');
-if ~exist(modelPath,'file')
+if ~exist(opts.modelPath,'file')
   net = deployFRCNN(net,imdb);
   net_ = net.saveobj() ;
-  save(modelPath, '-struct', 'net_') ;
+  save(opts.modelPath, '-struct', 'net_') ;
   clear net_ ;
 end
 
@@ -99,15 +105,31 @@ function net = deployFRCNN(net,imdb)
 % --------------------------------------------------------------------
 % function net = deployFRCNN(net)
 for l = numel(net.layers):-1:1
-  if isa(net.layers(l).block, 'dagnn.Loss') || ...
-      isa(net.layers(l).block, 'dagnn.DropOut')
+  if isa(net.layers(l).block, 'dagnn.DropOut')
     layer = net.layers(l);
     net.removeLayer(layer.name);
     net.renameVar(layer.outputs{1}, layer.inputs{1}, 'quiet', true) ;
   end
 end
+pFc6 = find(arrayfun(@(a) strcmp(a.name, 'predclsf'), net.params)==1);
+% domain-specific layers
+net.params(pFc6).value = 0.01 * randn(1,1,size(net.params(pFc6).value,3),2,'single');
+net.params(pFc6+1).value = zeros(1, 2, 'single');
 
-net.rebuild();
+ploss = find(arrayfun(@(a) strcmp(a.name, 'loss'), net.layers) == 1);
+net.setLayerInputs('loss', { net.layers(ploss).inputs{1}, net.layers(ploss).inputs{2}});
+net.layers(ploss).block = dagnn.Loss(); 
+net.layers(ploss).block.attach(net, ploss) ;
+
+ppredbbox = find(arrayfun(@(a) strcmp(a.name, 'predbboxf'), net.params)==1);
+% domain-specific layers
+net.params(ppredbbox).value = 0.01 * randn(1,1,size(net.params(ppredbbox).value,3),8,'single');
+net.params(ppredbbox+1).value = zeros(1, 8, 'single');
+ploss = find(arrayfun(@(a) strcmp(a.name, 'lossbbox'), net.layers) == 1);
+net.setLayerInputs('lossbbox', { net.layers(ploss).inputs{1}, net.layers(ploss).inputs{2}, net.layers(ploss).inputs{3} });
+net.layers(ploss).block = dagnn.LossSmoothL1(); 
+net.layers(ploss).block.attach(net, ploss) ;
+
 
 pfc8 = net.getLayerIndex('predcls') ;
 net.addLayer('probcls',dagnn.SoftMax(),net.layers(pfc8).outputs{1},...
@@ -115,27 +137,7 @@ net.addLayer('probcls',dagnn.SoftMax(),net.layers(pfc8).outputs{1},...
 
 net.vars(net.getVarIndex('probcls')).precious = true ;
 
-idxBox = net.getLayerIndex('predbbox') ;
-if ~isnan(idxBox)
-  net.vars(net.layers(idxBox).outputIndexes(1)).precious = true ;
-  % incorporate mean and std to bbox regression parameters
-  blayer = net.layers(idxBox) ;
-  filters = net.params(net.getParamIndex(blayer.params{1})).value ;
-  biases = net.params(net.getParamIndex(blayer.params{2})).value ;
-
-  boxMeans = single(imdb.boxes.bboxMeanStd{1}');
-  boxStds = single(imdb.boxes.bboxMeanStd{2}');
-
-  net.params(net.getParamIndex(blayer.params{1})).value = ...
-    bsxfun(@times,filters,...
-    reshape([boxStds(:)' zeros(1,4,'single')]',...
-    [1 1 1 8]));
-
-  biases = biases .* [boxStds(:)' zeros(1,4,'single')];
-
-  net.params(net.getParamIndex(blayer.params{2})).value = ...
-    bsxfun(@plus,biases, [boxMeans(:)' zeros(1,4,'single')]);
-end
+net.rebuild();
 
 net.mode = 'test' ;
 
@@ -147,11 +149,10 @@ if isempty(batch)
 end
 [im,rois,labels,btargets] = get_roi_batch(opts, imdb, k, batch, 'maxIn', opts.maxIn, 'minIn', opts.minIn);
 nb = numel(labels);
-nc = 2;
 if opts.piecewise
 % regression error only for positives
-instance_weights = zeros(1,1,4*nc,nb,'single');
-targets = zeros(1,1,4*nc,nb,'single');
+instance_weights = zeros(1,1,8,nb,'single');
+targets = zeros(1,1,8,nb,'single');
 
 for b=1:nb
   if labels(b)~=opts.bgLabel
@@ -248,7 +249,7 @@ for i = 1:numel(net.params)
   end
   
 end
-for i=pfc4:numel(net.params) - 4
+for i=pfc4:numel(net.params)
   if mod(i-pfc4, 2) == 0
      net.params(i).weightDecay = 1;
      net.params(i).learningRate = 10;
@@ -271,14 +272,24 @@ net.layers(ploss).block.attach(net, ploss) ;
 if opts.piecewise
 ppredbbox = find(arrayfun(@(a) strcmp(a.name, 'predbboxf'), net.params)==1);
 % domain-specific layers
+if opts.domain_bbox 
+net.params(ppredbbox).value = 0.01 * randn(1,1,size(net.params(ppredbbox).value,3),8*K,'single');
+net.params(ppredbbox+1).value = zeros(1, 8*K, 'single');
+ploss = find(arrayfun(@(a) strcmp(a.name, 'lossbbox'), net.layers) == 1);
+net.setLayerInputs('lossbbox', { net.layers(ploss).inputs{1}, net.layers(ploss).inputs{2}, net.layers(ploss).inputs{3}, 'domain' });
+net.layers(ploss).block = dagnn.MultiDomainLossSmoothL1(); 
+net.layers(ploss).block.attach(net, ploss) ;
+else
 net.params(ppredbbox).value = 0.01 * randn(1,1,size(net.params(ppredbbox).value,3),8,'single');
 net.params(ppredbbox+1).value = zeros(1, 8, 'single');
 
 end
+end
 
 net.rebuild();
-
-
+net.vars(net.getVarIndex('x10')).precious = true ;
+net.vars(net.getVarIndex('x17')).precious = true ;
+net.vars(net.getVarIndex('predbbox')).precious = true ;
 
 % -------------------------------------------------------------------------
 function genDir(path)

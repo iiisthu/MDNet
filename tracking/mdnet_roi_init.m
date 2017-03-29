@@ -1,4 +1,4 @@
-function [ net, opts] = mdnet_roi_init(image, net)
+function [ net_conv, net_fc, opts] = mdnet_roi_init(image, net)
 % MDNET_INIT
 % Initialize MDNet tracker.
 %
@@ -25,8 +25,8 @@ opts.batch_pos = 32;
 opts.batch_neg = 96;
 
 % initial training policy
-opts.learningRate_init = 0.01 * [ones(30,1); 0.1*ones(70,1);0.01*ones(100,1); 0.001*ones(100,1)]; % x10 for fc6
-opts.maxiter_init = 300;
+opts.learningRate_init = 0.0005 * [ones(200,1); 0.1*ones(200,1)]; % x10 for fc6
+opts.maxiter_init = 200;
 
 opts.nPos_init = 500;
 opts.nNeg_init = 5000;
@@ -34,7 +34,7 @@ opts.posThr_init = 0.7;
 opts.negThr_init = 0.5;
 
 % update policy
-opts.learningRate_update = 0.005; % x10 for fc6
+opts.learningRate_update = 0.0005; % x10 for fc6
 opts.maxiter_update = 10;
 
 opts.nPos_update = 50;
@@ -56,10 +56,12 @@ opts.maxIn = 400;
 opts.minIn = 107;
 opts.nmsThreshold = 0.3 ;
 opts.confThreshold = 0.5 ;
-opts.visualize = true;
+opts.visualize = false;
 % scaling policy
 opts.scale_factor = 1.05;
-
+opts.piecewise = 1;
+opts.derOutputs = {'losscls', 1, 'lossbbox', 0.1};
+%opts.derOutputs = {'losscls', 1};
 % sampling policy
 opts.nSamples = 256;
 opts.trans_f = 0.6; % translation std: mean(width,height)*trans_f/2
@@ -78,8 +80,54 @@ net.mode = 'test' ;
 % Mark class and bounding box predictions as `precious` so they are
 % not optimized away during evaluation.
 
-pfc8 = net.getLayerIndex('predcls') ;
-net.addLayer('probcls',dagnn.SoftMax(),net.layers(pfc8).outputs{1},...
-  'probcls',{})
 net.vars(net.getVarIndex('probcls')).precious = 1 ;
 net.vars(net.getVarIndex('predbbox')).precious = 1 ;
+
+pFc6 = find(arrayfun(@(a) strcmp(a.name, 'predclsf'), net.params)==1);
+for i = 1:pFc6 - 1
+   if mod(i, 2) == 1
+     net.params(i).weightDecay = 1;
+     net.params(i).learningRate = 1;
+  else
+     net.params(i).weightDecay = 0;
+     net.params(i).learningRate = 2;
+  end
+
+end
+for i=pFc6:numel(net.params) - 2 
+  if mod(i-pFc6, 2) == 0
+     net.params(i).weightDecay = 1;
+     net.params(i).learningRate = 1;
+  else
+     net.params(i).weightDecay = 0;
+     net.params(i).learningRate = 2;
+  end
+end
+
+lrelu3 = find(arrayfun(@(a) strcmp(a.name, 'relu3'), net.layers)==1);
+vx10 = find(arrayfun(@(a) strcmp(a.name, 'x10'), net.vars) == 1);
+pconv3b = find(arrayfun(@(a) strcmp(a.name, 'conv3b'), net.params) == 1);
+net_fc = copy(net);
+net_conv = copy(net);
+
+for i = 1:numel(net.layers)
+if i <= lrelu3
+net_fc.removeLayer(net.layers(i).name);
+else
+net_conv.removeLayer(net.layers(i).name);
+end
+end
+net_conv.vars = net.vars(1:vx10);
+net_fc.vars = net.vars(vx10:end);
+net_conv.params = net.params(1:pconv3b);
+net_fc.params = net.params(pconv3b+1:end);
+
+net_conv = dagnn.DagNN.loadobj(net_conv);
+net_fc = dagnn.DagNN.loadobj(net_fc);
+net_conv.rebuild();
+net_fc.rebuild();
+if opts.useGpu
+net_conv.move('gpu');
+net_fc.move('gpu');
+
+end

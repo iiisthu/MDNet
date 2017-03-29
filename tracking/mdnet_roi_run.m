@@ -28,7 +28,7 @@ if(size(img,3)==1), img = cat(3,img,img,img); end
 targetLoc = region;
 result = zeros(nFrames, 4); result(1,:) = targetLoc;
 
-[net, opts] = mdnet_roi_init(img, net);
+[net_conv, net_fc, opts] = mdnet_roi_init(img, net);
 ts = [ts, {toc(initts)}];
 
 %% Extract training examples
@@ -51,11 +51,40 @@ examples = [pos_examples; neg_examples];
 
 %% Learning CNN
 fprintf('  training cnn...\n');
-[img_crop, bboxes] = im_roi_crop(img, examples, opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
+[img_crop, target_crop, bboxes] = im_roi_crop(img, targetLoc, examples, opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
+if opts.useGpu
+img_crop = gpuArray(img_crop);
+end
+net_conv.eval({'input', img_crop});
+
+feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ;
+
 pos_examples = bboxes(1:size(pos_examples, 1), :);
 neg_examples = bboxes(size(pos_examples, 1) + 1: end, :);
-net = mdnet_roi_finetune_hnm(net, img_crop, pos_examples,neg_examples,opts,...
-    'maxiter',opts.maxiter_init,'learningRate',opts.learningRate_init);
+
+if opts.visualize 
+     figure(1);
+     imshow(uint8(img_crop));
+     hold on;
+     bbox = [target_crop;];
+     for i=1:size(bbox,1)
+        rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3), bbox(i,4)]), 'EdgeColor', 'r');
+        hold on;
+     end
+     %bbox = neg_examples(1:100,:);
+     bbox = pos_examples;
+     for i=1:size(bbox,1)
+        rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3), bbox(i,4)]), 'EdgeColor', 'b');
+        hold on;
+     end
+     hold off;
+     pause(0.1);
+end 
+ 
+
+
+net_fc = mdnet_roi_finetune_hnm(net_fc, img_crop, feat, target_crop, pos_examples,neg_examples,...
+    'maxiter',opts.maxiter_init,'learningRate',opts.learningRate_init, 'piecewise', opts.piecewise, 'derOutputs', opts.derOutputs);
 ts = [ts, {toc(initts) - ts{end}}];
 %% Initialize displayots
 if display
@@ -94,6 +123,8 @@ ts = [ts, {toc(initts) - ts{end}}];
 
 %% Main loop
 bk = 9;
+net_fc.mode = 'test' ;
+
 ts_ou_acc = zeros(bk,1);
 ts_counts = zeros(bk,1);
 for To = 2:nFrames;
@@ -107,17 +138,42 @@ for To = 2:nFrames;
     % draw target candidates
     samples = gen_samples('gaussian', targetLoc, opts.nSamples, opts, trans_f, scale_f);
     % evaluate the candidates
-    [window, bboxes] = im_roi_crop(img, samples, opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
+    [window,target_crop, bboxes] = im_roi_crop(img, targetLoc, samples, opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
     bboxes = single([ones(size(bboxes, 1), 1, 'single'), bboxes]');
+if ~opts.visualize
+     figure(2);
+     imshow(uint8(window));
+     hold on;
+     bbox = [target_crop;];
+     for i=1:size(bbox,1)
+        rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3), bbox(i,4)]), 'EdgeColor', 'r');
+        hold on;
+     end
+     %bbox = neg_examples(1:100,:);
+     bbox = bboxes(2:end,:)';
+     for i=1:size(bbox,1)
+        rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3), bbox(i,4)]), 'EdgeColor', 'b');
+        hold on;
+     end
+     hold off;
+     pause(0.1);
+end
     if opts.useGpu > 0
-    	window = gpuArray(window) ;
-    	bboxes = gpuArray(bboxes) ;
+        window = gpuArray(window) ;
+        bboxes = gpuArray(bboxes) ;
     end
-    inputs = {'input', window, 'rois', bboxes} ;
+    net_conv.eval({'input', window});
+    
+    feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ;
+    if opts.useGpu > 0
+        feat = gpuArray(feat);
+    end
+
+    inputs = {'x10', feat, 'rois', bboxes} ;
     % backprop
-    net.eval(inputs);
-    probs = squeeze(gather(net.vars(net.getVarIndex('probcls')).value)) ;
-    pbbox = squeeze(gather(net.vars(net.getVarIndex('predbbox')).value)) ;
+    net_fc.eval(inputs);
+    probs = squeeze(gather(net_fc.vars(net_fc.getVarIndex('probcls')).value)) ;
+    pbbox = squeeze(gather(net_fc.vars(net_fc.getVarIndex('predbbox')).value)) ;
     cprobs = probs(2,:);
     cdeltas = pbbox(5:8,:);
     cboxes = bbox_transform_inv(samples, cdeltas');
@@ -125,9 +181,9 @@ for To = 2:nFrames;
     keep = bbox_nms(cls_dets, opts.nmsThreshold) ;
     cls_dets = cls_dets(keep, :) ;
     sel_boxes = find(cls_dets(:,end) >= opts.confThreshold) ;
-    % final target
-    result(To,:) = cboxes(sel_boxes,:);
-    pb = cprobs(sel_boxes);
+    % final target 
+    result(To,:) = mean([cboxes(sel_boxes(min(5,end)),:)]);
+    pb = mean(cls_dets(sel_boxes(min(5,end)),end));
     % extend search space in case of failure
     if(pb < 0)
         trans_f = min(1.5, 1.1*trans_f);
@@ -150,10 +206,12 @@ for To = 2:nFrames;
         examples = [pos_examples; neg_examples];
         total_pos_data{To} = pos_examples;
         total_neg_data{To} = neg_examples;
-        [window, bboxes] = im_roi_crop(img, examples, opts.crop_mode, opts.crop_size, opts.padding, opts.minIn, opts.maxIn);
-        total_img_data{To} = window; 
-%	total_pos_data_export{To} = total_pos_data{To};
-%	total_neg_data_export{To} = total_neg_data{To};
+        [window, ~, bboxes] = im_roi_crop(img, targetLoc, examples, opts.crop_mode, opts.crop_size, opts.padding, opts.minIn, opts.maxIn);
+        net_conv.eval({'input', window});
+        feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ;
+        total_img_data{To} = feat; 
+%       total_pos_data_export{To} = total_pos_data{To};
+%       total_neg_data_export{To} = total_neg_data{To};
         success_frames = [success_frames, To];
         if(numel(success_frames)>opts.nFrames_long)
             total_pos_data{success_frames(end-opts.nFrames_long)} = single([]);
@@ -164,8 +222,8 @@ for To = 2:nFrames;
     else
         total_pos_data{To} = single([]);
         total_neg_data{To} = single([]);
-%	total_pos_data_export{To} = total_pos_data{To};
-%	total_neg_data_export{To} = total_neg_data{To};
+%       total_pos_data_export{To} = total_pos_data{To};
+%       total_neg_data_export{To} = total_neg_data{To};
     end
 
     %% Network update
@@ -180,7 +238,7 @@ for To = 2:nFrames;
         neg_data = cell2mat(total_neg_data(success_frames(max(1,end-opts.nFrames_short+1):end)));
         
 %         fprintf('\n');
-        [net] = mdnet_finetune_hnm(net,pos_data,neg_data,opts,...
+        [net_fc] = mdnet_finetune_hnm(net_fc, img_data, pos_data,neg_data,opts,...
             'maxiter',opts.maxiter_update,'learningRate',opts.learningRate_update);
     end
     

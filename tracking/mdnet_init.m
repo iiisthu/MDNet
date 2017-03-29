@@ -51,7 +51,7 @@ opts.nFrames_short = 20; % short-term period
 % cropping policy
 opts.input_size = 107;
 opts.crop_mode = 'wrap';
-opts.crop_padding = 16;
+opts.crop_padding = 0;
 
 % scaling policy
 opts.scale_factor = 1.05;

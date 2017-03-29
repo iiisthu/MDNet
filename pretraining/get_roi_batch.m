@@ -18,7 +18,7 @@ opts.batch_pos        = floor(32/numel(batch));
 opts.batch_neg        = floor(96/numel(batch));
 opts = vl_argparse(opts, varargin);
 images = {imdb.images.name{k}{batch}}; 
-
+gtboxes = {imdb.boxes.gtbox{k}{batch}};
 im = cell(1, numel(images)) ;
 % fetch is true if images is a list of filenames (instead of
 % a cell array of images)
@@ -99,10 +99,11 @@ for b=1:numel(batch)
 end
 
 labels = vertcat(plabels{:});
-targets = vertcat(ptargets{:});
+%targets = vertcat(ptargets{:});
 
 % rescale images and rois
 rois = [];
+targets = [];
 imre = cell(1,numel(batch));
 for b=1:numel(batch)
   imSize = size(ims{b});
@@ -147,7 +148,7 @@ for b=1:numel(batch)
      end
      hold off;
   end 
-  [imre{b}, bboxes] = im_roi_crop(ims{b}, bbox, opts.crop_mode, opts.crop_size, opts.crop_padding,opts.minIn, opts.maxIn, []);
+  [imre{b}, targetLoc, bboxes] = im_roi_crop(ims{b}, gtboxes{b}, bbox, opts.crop_mode, opts.crop_size, opts.crop_padding,opts.minIn, opts.maxIn, []);
    if opts.visualize
      figure(2);
      imshow(uint8(imre{b}+128));
@@ -163,6 +164,7 @@ for b=1:numel(batch)
   end 
   nB = size(bboxes,1);
   rois = [rois [b*ones(1,nB) ; bboxes' ] ];
+  targets = [targets; [bbox_transform(bboxes, targetLoc)]];
   maxH = max(maxH, size(imre{b},1));
   maxW = max(maxW, size(imre{b},2));
 end
@@ -181,5 +183,4 @@ for b=1:numel(batch)
   sz = size(imre{b});
   imo(1:sz(1),1:sz(2),:,b) = single(imre{b});
 end
-
 

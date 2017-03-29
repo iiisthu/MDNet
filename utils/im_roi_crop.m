@@ -1,5 +1,5 @@
-function [window, bboxes] = ...
-    im_roi_crop(im, bboxes, crop_mode, crop_size, padding, minIn, maxIn, mean_rgb)
+function [window,targetLoc, bboxes] = ...
+    im_roi_crop(im, target, bboxes, crop_mode, crop_size, padding, minIn, maxIn, mean_rgb)
 % window = im_crop(im, bboxes, crop_mode, crop_size, padding, image_mean)
 %   Crops a window specified by bboxes (in [x1 y1 x2 y2] order) out of im.
 %
@@ -53,6 +53,7 @@ if padding > 0 || use_square
 %    end
     bboxes = round([center center] + ...
         [-half_width -half_height half_width half_height]*scale);
+    target = round([target(1), target(2), target(1) + target(3) , target(2) + target(4)]);
     unclipped_height = bboxes(:,4)-bboxes(:,2)+1;
     unclipped_width = bboxes(:,3)-bboxes(:,1)+1;
     %figure(1); showboxesc([], bboxes, 'r', '-');
@@ -83,6 +84,7 @@ else % padding > 0 || square
     center = [bboxes(:,1)+half_width bboxes(:,2)+half_height];
     bboxes = round([center center] + ...
         [-half_width -half_height half_width half_height]);
+    target = round([target(1), target(2), target(1) + target(3) , target(2) + target(4)]);
 end
 minLw = min(max(1, bboxes(:,1)));
 minLh = min(max(1, bboxes(:,2)));
@@ -90,9 +92,10 @@ maxRw = max(min(bboxes(:,3), size(im, 2)));
 maxRh = max(min(bboxes(:,4), size(im, 1)));
 
 window = im(minLh:maxRh, minLw:maxRw, :);
-
-
 bboxes = [ bboxes(:,1) - minLw + 1, bboxes(:, 2) - minLh + 1, bboxes(:, 3) - minLw + 1, bboxes(:,4) - minLh + 1];
+targetLoc = [target(1) - minLw + 1, target(2) - minLh + 1, target(3) - minLw + 1, target(4) - minLh + 1];
+
+
 
 twidth = maxRw - minLw + 1;
 theight = maxRh - minLh + 1;
@@ -117,3 +120,4 @@ else
 end
 window = tmp;
 bboxes = [bboxes(:,1), bboxes(:, 2), (bboxes(:,3) - bboxes(:,1)), (bboxes(:,4) - bboxes(:,2)) ]*scale;
+targetLoc = [targetLoc(1), targetLoc(2), (targetLoc(3) - targetLoc(1)), (targetLoc(4) - targetLoc(2)) ]*scale;

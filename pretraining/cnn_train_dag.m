@@ -70,6 +70,9 @@ else
   state = [] ;
 end
 
+net.vars(net.getVarIndex('x10')).precious = true ;
+net.vars(net.getVarIndex('x17')).precious = true ;
+net.vars(net.getVarIndex('predbbox')).precious = true ;
 for epoch=start+1:opts.numEpochs
 
   % Set the random seed based on the epoch and opts.randomSeed.

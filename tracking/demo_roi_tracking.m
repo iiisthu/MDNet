@@ -18,7 +18,7 @@ conf = genConfig('otb','Diving');
 
 switch(conf.dataset)
     case 'otb'
-        net = fullfile('models','mdnet_roi_vot-otb.mat');
+        net = fullfile('models','net-deployed_shared_bbox_relu.mat');
     case 'vot2014'
         net = fullfile('models','mdnet_roi_otb-vot14.mat');
     case 'vot2015'
