@@ -31,7 +31,7 @@ end
 %    {'ou_store_sample'},{'ou_store_conv'} ...
 %    {'ou_update'},{'ou_total'}, {'ou_total_expel_update'}
 %	];
-[result, ts] = mdnet_roi_run(conf.imgList, conf.gt(1,:), net, false);
+[result, ts] = mdnet_roi_run(conf.imgList, conf.gt(1,:), net, true);
 %ts_table = [ts_table; [{'Diving'}, ts]];
 %% write timestamp to csv data
 %[N,l] = size(ts_table);

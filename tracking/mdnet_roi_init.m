@@ -7,7 +7,7 @@ function [ net_conv, net_fc, opts] = mdnet_roi_init(image, net)
 
 %% set opts
 % use gpu
-opts.useGpu = true;
+opts.gpus = [3];
 
 % model def
 opts.net_file = net;
@@ -25,16 +25,16 @@ opts.batch_pos = 32;
 opts.batch_neg = 96;
 
 % initial training policy
-opts.learningRate_init = 0.0005 * [ones(200,1); 0.1*ones(200,1)]; % x10 for fc6
-opts.maxiter_init = 400;
+opts.maxiter_init = 200;
+opts.learningRate_init = 0.0005 * [ones(opts.maxiter_init/2,1);0.1*ones(opts.maxiter_init/2,1)]; % x10 for fc6
 
-opts.nPos_init = 50;
-opts.nNeg_init = 200;
+opts.nPos_init = 500;
+opts.nNeg_init = 5000;
 opts.posThr_init = 0.7;
 opts.negThr_init = 0.5;
 
 % update policy
-opts.learningRate_update = 0.0005; % x10 for fc6
+opts.learningRate_update = 0.000005; % x10 for fc6
 opts.maxiter_update = 10;
 
 opts.nPos_update = 50;
@@ -60,8 +60,11 @@ opts.visualize = false;
 % scaling policy
 opts.scale_factor = 1.05;
 opts.piecewise = 1;
-opts.derOutputs = {'losscls', 1, 'lossbbox', 1};
-%opts.derOutputs = {'losscls', 1};
+if opts.piecewise
+opts.derOutputs = {'losscls', 1, 'lossbbox', 0.2};
+else
+opts.derOutputs = {'losscls', 1};
+end
 % sampling policy
 opts.nSamples = 256;
 opts.trans_f = 0.6; % translation std: mean(width,height)*trans_f/2
@@ -94,7 +97,7 @@ for i = 1:pFc6 - 1
   end
 
 end
-for i=pFc6:numel(net.params) - 2 
+for i=pFc6:numel(net.params)  
   if mod(i-pFc6, 2) == 0
      net.params(i).weightDecay = 1;
      net.params(i).learningRate = 10;
@@ -126,7 +129,7 @@ net_conv = dagnn.DagNN.loadobj(net_conv);
 net_fc = dagnn.DagNN.loadobj(net_fc);
 net_conv.rebuild();
 net_fc.rebuild();
-if opts.useGpu
+if numel(opts.gpus) > 0
 net_conv.move('gpu');
 net_fc.move('gpu');
 

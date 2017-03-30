@@ -1,4 +1,4 @@
-function [net] = mdnet_roi_finetune_hnm(net, img_ori, img, targetLoc, pos_data, neg_data, varargin)
+function [net] = mdnet_roi_finetune_hnm(net, net_conv, img, targetLoc, pos_data, neg_data, varargin)
 % MDNET_FINETUNE_HNM   
 % Train a CNN by SGD, with hard minibatch mining.
 %
@@ -6,8 +6,7 @@ function [net] = mdnet_roi_finetune_hnm(net, img_ori, img, targetLoc, pos_data, 
 % Hyeonseob Nam, 2015
 %
 
-opts.useGpu = true;
-opts.gpus = 3;
+opts.gpus = [];
 opts.conserveMemory = true ;
 opts.sync = true ;
 opts.piecewise = 0;
@@ -18,19 +17,25 @@ opts.momentum = 0.9 ;
 opts.nesterovUpdate = false ;
 opts.batchSize_hnm = 256;
 opts.batchAcc_hnm = 4;
-
+opts.parameterServer.method = 'mmap' ;
+opts.parameterServer.prefix = 'mcn' ;
 opts.batchSize = 128;
 opts.batch_pos = 32;
 opts.batch_neg = 96;
 opts.derOutputs = {'losscls', 1} ;
 opts.visualize = false;
+opts.crop_mode = 'warp';
+opts.crop_size = 107;
+opts.crop_padding = 16;
+opts.maxIn = 400;
+opts.minIn = 200;
 [opts, args] = vl_argparse(opts, varargin) ;
 % -------------------------------------------------------------------------
 %                                                    Network initialization
 % -------------------------------------------------------------------------
-ppred = find(arrayfun(@(a) strcmp(a.name, 'predclsf'), net.params)==1);
-net.params(ppred).value = 0.01 * randn(1,1,size(net.params(ppred).value, 3), size(net.params(ppred).value, 4),'single');
-net.params(ppred + 1).value = zeros(size(net.params(ppred + 1).value ), 'single');
+%ppred = find(arrayfun(@(a) strcmp(a.name, 'predclsf'), net.params)==1);
+%net.params(ppred).value = 0.01 * randn(1,1,size(net.params(ppred).value, 3), size(net.params(ppred).value, 4),'single');
+%net.params(ppred + 1).value = zeros(size(net.params(ppred + 1).value ), 'single');
 
 
 
@@ -81,22 +86,21 @@ if isempty(state) || isempty(state.momentum)
   state.momentum = num2cell(zeros(1, numel(net.params))) ;
 end
 
-if opts.useGpu
 numGpus = numel(opts.gpus) ;
 if numGpus >= 1
   net.move('gpu') ;
   state.momentum = cellfun(@gpuArray, state.momentum, 'uniformoutput', false) ;
 end
 if numGpus > 1
-  parserv = ParameterServer(params.parameterServer) ;
+  parserv = ParameterServer(opts.parameterServer) ;
   net.setParameterServer(parserv) ;
 else
   parserv = [] ;
 end
-end
 
 % objective fuction
-objective = zeros(1,opts.maxiter);
+loss_cls = zeros(1,opts.maxiter);
+loss_bbox = zeros(1,opts.maxiter);
 
 %% training on training set
 % fprintf('\n');
@@ -111,17 +115,26 @@ for t=1:opts.maxiter
     hneg_start = opts.batchSize_hnm*opts.batchAcc_hnm*(t-1);
     for h=1:opts.batchAcc_hnm
         batch = neg_data(train_neg(hneg_start+(h-1)*opts.batchSize_hnm+1:hneg_start+h*opts.batchSize_hnm), :);
-        rois = [ones(size(batch,1),1),  batch]' ;        img = single(img);
+        img = single(img);
+        [img_crop, target_crop, bboxes, R] = im_roi_crop(img, targetLoc, batch, opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
+        if numel(opts.gpus) > 0
+           img_crop = gpuArray(img_crop);
+           net_conv.move('gpu');
+        end
+        net_conv.mode = 'test';
+        net_conv.eval({'input', img_crop});
+        feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ; 
+        rois = [ones(size(bboxes,1),1),  bboxes]' ;        
         rois = single(rois);
         % Evaluate network either on CPU or GPU.
-        if opts.useGpu > 0
-            img = gpuArray(img) ;
+        if numel(opts.gpus) > 0
+	    feat = gpuArray(feat);
             rois = gpuArray(rois) ;
             net.move('gpu') ;
         end
         net.mode = 'test' ;
         net.conserveMemory = false ;
-        inputs = {'x10', img, 'rois', rois} ;
+        inputs = {'x10', feat, 'rois', rois} ;
         % backprop
         net.eval(inputs);
         % Extract class probabilities and  bounding box refinements
@@ -134,9 +147,9 @@ for t=1:opts.maxiter
     fprintf('max score: %.3f, min score: %.3f', score_hneg(ord(1)), score_hneg(ord(end)) );
     hnegs = train_neg(hneg_start+ord(1:opts.batch_neg));
     im_hneg = neg_data(hnegs, :);
-    if ~opts.visualize
+    if opts.visualize
          figure(2);
-         imshow(uint8(img_ori)+128);
+         imshow(uint8(img)+128);
          hold on;
          bbox = [targetLoc;];
          for i=1:size(bbox,1)
@@ -160,10 +173,19 @@ for t=1:opts.maxiter
     % ----------------------------------------------------------------------
     pos = pos_data(train_pos((t-1)*opts.batch_pos+1:t*opts.batch_pos), :);
     batch = cat(1,pos,im_hneg);
+    [img_crop, target_crop, bboxes, R] = im_roi_crop(img, targetLoc,batch, opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
+    if numel(opts.gpus) > 0
+       img_crop = gpuArray(img_crop);
+    end
+    net_conv.eval({'input', img_crop});
+
+    feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ;
+
+
 
     labels = [2*ones(opts.batch_pos,1,'single');ones(opts.batch_neg,1,'single')];
-    btarget = bbox_transform(pos, repmat(targetLoc,size(pos,1),1));
     if opts.piecewise
+       btarget = bbox_transform(bboxes(1:opts.batch_pos,:), repmat(target_crop,size(pos,1),1));
     % regression error only for positives
        instance_weights = zeros(1,1,8,size(batch,1),'single');
        targets = zeros(1,1,8,size(batch,1),'single');
@@ -176,9 +198,9 @@ for t=1:opts.maxiter
     end
 
 
-    rois = single([ones(size(batch, 1), 1), batch]');
-    if opts.useGpu
-        img = gpuArray(img);
+    rois = single([ones(size(bboxes, 1), 1), bboxes]');
+    if numel(opts.gpus) > 0
+        feat = gpuArray(feat);
         rois = gpuArray(rois) ;
         labels = gpuArray(labels);
     end
@@ -186,23 +208,29 @@ for t=1:opts.maxiter
     opts.learningRate = opts.learningRate(min(t, numel(opts.learningRate)));
     params = opts;
     if opts.piecewise
-        inputs = {'x10', img, 'rois', rois, 'label', labels, 'targets', targets, 'instance_weights', instance_weights } ;
+        inputs = {'x10', feat, 'rois', rois, 'label', labels, 'targets', targets, 'instance_weights', instance_weights } ;
     else
-        inputs = {'x10', img, 'rois', rois, 'label', labels } ;
+        inputs = {'x10', feat, 'rois', rois, 'label', labels } ;
     end
     net.mode = 'normal' ;
 
     net.eval(inputs, params.derOutputs);
     % gradient step
+    if ~isempty(parserv), parserv.sync() ; end
     state = accumulateGradients(net, state, params, size(batch, 1), parserv) ;
    
     % print information
     loss = squeeze(gather(net.vars(net.getVarIndex('losscls')).value)) ;
     probs = squeeze(gather(net.vars(net.getVarIndex('probcls')).value)) ;
 
-    objective(t) = gather(loss)/opts.batchSize ;
+    loss_cls(t) = gather(loss)/opts.batchSize ;
+    if opts.piecewise
+    	lossb = squeeze(gather(net.vars(net.getVarIndex('lossbbox')).value)) ;
+    	loss_bbox(t) = gather(lossb)/opts.batchSize ;
+    end
     iter_time = toc(iter_time);
-    fprintf('iter: %d, objective %.3f, %.2f s\n', t, objective(t), iter_time) ;
+    fprintf('iter: %d, cls_loss %.3f, bbox_loss: %.3f, time %.2f s\n', t, loss_cls(t), loss_bbox(t), iter_time) ;
+    net.reset();
     
 end % next batch
 net.reset();

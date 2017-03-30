@@ -7,8 +7,8 @@ function pred_boxes = bbox_transform_inv(boxes, deltas)
 
 if isempty(boxes), return; end
 
-widths  = boxes(:,3) - boxes(:,1);
-heights = boxes(:,4) - boxes(:,2);
+widths  = boxes(:,3) ;
+heights = boxes(:,4) ;
 ctr_x = boxes(:,1) + 0.5 * widths;
 ctr_y = boxes(:,2) + 0.5 * heights;
 
@@ -27,7 +27,7 @@ pred_boxes = zeros(size(deltas), 'like', deltas);
 pred_boxes(:, 1) = pred_ctr_x - 0.5 * pred_w;
 % y1
 pred_boxes(:, 2) = pred_ctr_y - 0.5 * pred_h;
-% x2
-pred_boxes(:, 3) = pred_ctr_x + 0.5 * pred_w;
-% y2
-pred_boxes(:, 4) = pred_ctr_y + 0.5 * pred_h;
+% w
+pred_boxes(:, 3) = pred_w;
+% h
+pred_boxes(:, 4) = pred_h;
