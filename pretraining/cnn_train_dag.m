@@ -93,7 +93,7 @@ for epoch=start+1:opts.numEpochs
   params.frame_list = {};
 
   if numel(opts.gpus) <= 1
-    [net, state] = processEpoch(net, state, params, 'train') ;
+    %[net, state] = processEpoch(net, state, params, 'train') ;
     [net, state] = processEpoch(net, state, params, 'val') ;
     if ~evaluateMode
       saveState(modelPath(epoch), net, state) ;

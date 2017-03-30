@@ -136,7 +136,7 @@ for t=1:opts.maxiter
     im_hneg = neg_data(hnegs, :);
     if ~opts.visualize
          figure(2);
-         imshow(uint8(img_ori));
+         imshow(uint8(img_ori)+128);
          hold on;
          bbox = [targetLoc;];
          for i=1:size(bbox,1)

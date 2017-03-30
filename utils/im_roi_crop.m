@@ -1,4 +1,4 @@
-function [window,targetLoc, bboxes] = ...
+function [window,targetLoc, bboxes, R] = ...
     im_roi_crop(im, target, bboxes, crop_mode, crop_size, padding, minIn, maxIn, mean_rgb)
 % window = im_crop(im, bboxes, crop_mode, crop_size, padding, image_mean)
 %   Crops a window specified by bboxes (in [x1 y1 x2 y2] order) out of im.
@@ -103,8 +103,10 @@ scale_h = mean(crop_height ./(bboxes(:,4) - bboxes(:,2) + 1));
 scale_w = mean(crop_width ./(bboxes(:,3) - bboxes(:,1) + 1));
 scale = min(scale_h, scale_w);
 scale = max(min( scale, maxIn/max(twidth, theight)), minIn/min(twidth, theight) ); 
-tmp = imresize(window, [ round(theight * scale), round( twidth * scale) ], 'bilinear', 'antialiasing', false);
-
+input_size = round(min(maxIn, max(theight*scale, twidth*scale)));
+tmp = imresize(window, [ input_size, input_size ], 'bilinear', 'antialiasing', false);
+scale_h = input_size / theight;
+scale_w = input_size / twidth;
 tmp = single(tmp);
 
 if isempty(mean_rgb)
@@ -119,5 +121,6 @@ else
     tmp(:,:,3) = tmp(:,:,3)-mean_rgb(3);
 end
 window = tmp;
-bboxes = [bboxes(:,1), bboxes(:, 2), (bboxes(:,3) - bboxes(:,1)), (bboxes(:,4) - bboxes(:,2)) ]*scale;
-targetLoc = [targetLoc(1), targetLoc(2), (targetLoc(3) - targetLoc(1)), (targetLoc(4) - targetLoc(2)) ]*scale;
+bboxes = [bboxes(:,1)*scale_w, bboxes(:, 2)*scale_h, (bboxes(:,3) - bboxes(:,1))*scale_w, (bboxes(:,4) - bboxes(:,2))*scale_h ];
+targetLoc = [targetLoc(1)*scale_w, targetLoc(2)*scale_h, (targetLoc(3) - targetLoc(1))*scale_w, (targetLoc(4) - targetLoc(2))*scale_h ];
+R = [minLw, minLh, scale_w, scale_h];

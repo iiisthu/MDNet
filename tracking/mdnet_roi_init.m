@@ -26,10 +26,10 @@ opts.batch_neg = 96;
 
 % initial training policy
 opts.learningRate_init = 0.0005 * [ones(200,1); 0.1*ones(200,1)]; % x10 for fc6
-opts.maxiter_init = 200;
+opts.maxiter_init = 400;
 
-opts.nPos_init = 500;
-opts.nNeg_init = 5000;
+opts.nPos_init = 50;
+opts.nNeg_init = 200;
 opts.posThr_init = 0.7;
 opts.negThr_init = 0.5;
 
@@ -53,14 +53,14 @@ opts.crop_size = 107;
 opts.crop_mode = 'wrap';
 opts.crop_padding = 16;
 opts.maxIn = 400;
-opts.minIn = 107;
+opts.minIn = 200;
 opts.nmsThreshold = 0.3 ;
 opts.confThreshold = 0.5 ;
 opts.visualize = false;
 % scaling policy
 opts.scale_factor = 1.05;
 opts.piecewise = 1;
-opts.derOutputs = {'losscls', 1, 'lossbbox', 0.1};
+opts.derOutputs = {'losscls', 1, 'lossbbox', 1};
 %opts.derOutputs = {'losscls', 1};
 % sampling policy
 opts.nSamples = 256;
@@ -97,10 +97,10 @@ end
 for i=pFc6:numel(net.params) - 2 
   if mod(i-pFc6, 2) == 0
      net.params(i).weightDecay = 1;
-     net.params(i).learningRate = 1;
+     net.params(i).learningRate = 10;
   else
      net.params(i).weightDecay = 0;
-     net.params(i).learningRate = 2;
+     net.params(i).learningRate = 20;
   end
 end
 

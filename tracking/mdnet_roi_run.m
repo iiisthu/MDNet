@@ -51,7 +51,7 @@ examples = [pos_examples; neg_examples];
 
 %% Learning CNN
 fprintf('  training cnn...\n');
-[img_crop, target_crop, bboxes] = im_roi_crop(img, targetLoc, examples, opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
+[img_crop, target_crop, bboxes, R] = im_roi_crop(img, targetLoc, examples, opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
 if opts.useGpu
 img_crop = gpuArray(img_crop);
 end
@@ -62,9 +62,9 @@ feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ;
 pos_examples = bboxes(1:size(pos_examples, 1), :);
 neg_examples = bboxes(size(pos_examples, 1) + 1: end, :);
 
-if opts.visualize 
+if ~opts.visualize 
      figure(1);
-     imshow(uint8(img_crop));
+     imshow(uint8(img_crop)+128);
      hold on;
      bbox = [target_crop;];
      for i=1:size(bbox,1)
@@ -72,7 +72,7 @@ if opts.visualize
         hold on;
      end
      %bbox = neg_examples(1:100,:);
-     bbox = pos_examples;
+     bbox = neg_examples;
      for i=1:size(bbox,1)
         rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3), bbox(i,4)]), 'EdgeColor', 'b');
         hold on;
@@ -104,6 +104,8 @@ end
 total_pos_data = cell(1,1,1,nFrames);
 total_neg_data = cell(1,1,1,nFrames);
 total_img_data = cell(1,1,1,nFrames);
+total_img_ori = cell(1,1,1,nFrames);
+
 % total_pos_data_export = cell(1,1,1,nFrames);
 % total_neg_data_export = cell(1,1,1,nFrames);
 neg_examples = gen_samples('uniform', targetLoc, opts.nNeg_update*2, opts, 2, 5);
@@ -111,7 +113,8 @@ r = overlap_ratio(neg_examples,targetLoc);
 neg_examples = neg_examples(r<opts.negThr_init,:);
 neg_examples = neg_examples(randsample(end,min(opts.nNeg_update,end)),:);
 
-total_img_data{1} = img;
+total_img_data{1} = feat;
+total_img_ori{1} = img;
 total_pos_data{1} = pos_examples;
 total_neg_data{1} = neg_examples;
 %total_pos_data_export{1} = feat_conv(:,:,:,pos_idx);
@@ -138,7 +141,7 @@ for To = 2:nFrames;
     % draw target candidates
     samples = gen_samples('gaussian', targetLoc, opts.nSamples, opts, trans_f, scale_f);
     % evaluate the candidates
-    [window,target_crop, bboxes] = im_roi_crop(img, targetLoc, samples, opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
+    [window,target_crop, bboxes,R] = im_roi_crop(img, targetLoc, samples, opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
     bboxes = single([ones(size(bboxes, 1), 1, 'single'), bboxes]');
 if ~opts.visualize
      figure(2);
@@ -182,7 +185,9 @@ end
     cls_dets = cls_dets(keep, :) ;
     sel_boxes = find(cls_dets(:,end) >= opts.confThreshold) ;
     % final target 
-    result(To,:) = mean([cboxes(sel_boxes(min(5,end)),:)]);
+    targetLoc = mean([cboxes(sel_boxes(min(5,end)),:)]);
+    targetLoc = [targetLoc(1)/R(3) + R(1), targetLoc(2)/R(4) + R(2), targetLoc(3:4)./R(3:4) ];
+    results(To,:) = targetLoc;
     pb = mean(cls_dets(sel_boxes(min(5,end)),end));
     % extend search space in case of failure
     if(pb < 0)
@@ -206,10 +211,11 @@ end
         examples = [pos_examples; neg_examples];
         total_pos_data{To} = pos_examples;
         total_neg_data{To} = neg_examples;
-        [window, ~, bboxes] = im_roi_crop(img, targetLoc, examples, opts.crop_mode, opts.crop_size, opts.padding, opts.minIn, opts.maxIn);
+        [window, ~, bboxes,R] = im_roi_crop(img, targetLoc, examples, opts.crop_mode, opts.crop_size, opts.padding, opts.minIn, opts.maxIn);
         net_conv.eval({'input', window});
         feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ;
         total_img_data{To} = feat; 
+        total_img_ori{To} = img;
 %       total_pos_data_export{To} = total_pos_data{To};
 %       total_neg_data_export{To} = total_neg_data{To};
         success_frames = [success_frames, To];
@@ -222,6 +228,8 @@ end
     else
         total_pos_data{To} = single([]);
         total_neg_data{To} = single([]);
+        total_img_ori{To} = single([]);
+        total_img_data{To} = single([]);
 %       total_pos_data_export{To} = total_pos_data{To};
 %       total_neg_data_export{To} = total_neg_data{To};
     end
@@ -231,14 +239,17 @@ end
         if (target_score<0) % short-term update
             pos_data = cell2mat(total_pos_data(success_frames(max(1,end-opts.nFrames_short+1):end)));
             img_data = cell2mat(total_img_data(success_frames(max(1,end-opts.nFrames_short+1):end)));
+            img_ori = cell2mat(total_img_ori(success_frames(max(1,end-opts.nFrames_short+1):end)));
+
         else % long-term update
             pos_data = cell2mat(total_pos_data(success_frames(max(1,end-opts.nFrames_long+1):end)));
             img_data = cell2mat(total_img_data(success_frames(max(1,end-opts.nFrames_long+1):end)));
+            img_ori = cell2mat(total_img_ori(success_frames(max(1,end-opts.nFrames_long+1):end)));
         end
         neg_data = cell2mat(total_neg_data(success_frames(max(1,end-opts.nFrames_short+1):end)));
         
 %         fprintf('\n');
-        [net_fc] = mdnet_finetune_hnm(net_fc, img_data, pos_data,neg_data,opts,...
+        [net_fc] = mdnet_finetune_hnm(net_fc, img_ori, img_data, pos_data,neg_data,opts,...
             'maxiter',opts.maxiter_update,'learningRate',opts.learningRate_update);
     end
     

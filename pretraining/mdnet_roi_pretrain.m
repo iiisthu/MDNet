@@ -38,7 +38,7 @@ opts.train.batchSize        = 4 ;
 
 opts.train.numEpochs        = 20 ; % #cycles (#iterations/#domains)
 opts.train.learningRate     = 0.01*[0.001*ones(5,1); 0.0001*ones(5,1);0.0001*ones(5,1)] ; % x10 for fc4-6
-opts.train.gpus = [1,2] ;
+opts.train.gpus = [] ;
 opts.train.numSubBatches = 1 ;
 opts.train.prefetch = false ; % does not help for two images in a batch
 opts.train.weightDecay = 0.0005 ;
@@ -67,10 +67,10 @@ opts.train.derOutputs = {'losscls', 1} ;
 end
 %% Initializing MDNet
 K = numel(imdb.images.name);
-net = mdnet_roi_init_train(opts, K);
-% net = load(opts.netFile);
-% net = net.net;
-% net = dagnn.DagNN.loadobj(net);
+%net = mdnet_roi_init_train(opts, K);
+ net = load(opts.netFile);
+ net = net.net;
+ net = dagnn.DagNN.loadobj(net);
 
 %% Training MDNet
 % minibatch options
@@ -78,7 +78,7 @@ bopts.gpus             = opts.train.gpus;
 bopts.batch_pos        = 32;
 bopts.batch_neg        = 96;
 bopts.maxIn = 400;
-bopts.minIn = 107;
+bopts.minIn = 200;
 bopts.bgLabel = 1;
 bopts.piecewise = opts.piecewise;
 bopts.visualize = 0;

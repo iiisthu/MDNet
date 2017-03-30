@@ -148,8 +148,13 @@ for b=1:numel(batch)
      end
      hold off;
   end 
-  [imre{b}, targetLoc, bboxes] = im_roi_crop(ims{b}, gtboxes{b}, bbox, opts.crop_mode, opts.crop_size, opts.crop_padding,opts.minIn, opts.maxIn, []);
-   if opts.visualize
+  [imre{b}, targetLoc, bboxes, R] = im_roi_crop(ims{b}, gtboxes{b}, bbox, opts.crop_mode, opts.crop_size, opts.crop_padding,opts.minIn, opts.maxIn, []);
+   if ~opts.visualize
+     figure(1);
+     imshow(uint8(ims{b}));
+     bb = [ targetLoc(1) / R(3) + R(1), targetLoc(2)/ R(4) + R(2), targetLoc(3:4)./R(3:4)];
+     rectangle('Position', round(bb));
+     
      figure(2);
      imshow(uint8(imre{b}+128));
      hold on;
