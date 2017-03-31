@@ -144,7 +144,7 @@ for t=1:opts.maxiter
         score_hneg((h-1)*opts.batchSize_hnm+1:h*opts.batchSize_hnm) = probs;
     end
     [~,ord] = sort(score_hneg,'descend');
-    fprintf('max score: %.3f, min score: %.3f', score_hneg(ord(1)), score_hneg(ord(end)) );
+    %fprintf('max score: %.3f, min score: %.3f', score_hneg(ord(1)), score_hneg(ord(end)) );
     hnegs = train_neg(hneg_start+ord(1:opts.batch_neg));
     im_hneg = neg_data(hnegs, :);
     if opts.visualize

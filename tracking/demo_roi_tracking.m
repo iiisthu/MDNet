@@ -13,7 +13,7 @@ addpath('pretraining');
 addpath('tracking');
 addpath('utils');
 addpath('pretraining/bbox_functions');
-conf = genConfig('otb','Biker');
+conf = genConfig('otb','Diving');
 % conf = genConfig('vot2015','ball1');
 
 switch(conf.dataset)

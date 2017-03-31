@@ -16,8 +16,6 @@ opts.net_file = net;
 opts.batchSize_test = 256; % <- reduce it in case of out of gpu memory
 
 % bounding box regression
-opts.bbreg = true;
-opts.bbreg_nSamples = 1000;
 
 % learning policy
 opts.batchSize = 128;
@@ -34,7 +32,7 @@ opts.posThr_init = 0.7;
 opts.negThr_init = 0.5;
 
 % update policy
-opts.learningRate_update = 0.000005; % x10 for fc6
+opts.learningRate_update = 0.0005; % x10 for fc6
 opts.maxiter_update = 10;
 
 opts.nPos_update = 50;
@@ -97,7 +95,7 @@ for i = 1:pFc6 - 1
   end
 
 end
-for i=pFc6:numel(net.params)  
+for i=pFc6:numel(net.params) - 2 
   if mod(i-pFc6, 2) == 0
      net.params(i).weightDecay = 1;
      net.params(i).learningRate = 10;

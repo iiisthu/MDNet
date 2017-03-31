@@ -164,7 +164,7 @@ for To = 2:nFrames;
         end
     end
      
-    if ~opts.visualize
+    if opts.visualize
      figure(2);
      imshow(uint8(window));
      hold on;
@@ -202,7 +202,7 @@ for To = 2:nFrames;
     end
     
     %% Prepare training data
-    if(target_score>0.8)    
+    if(target_score>0.6)    
         pos_examples = gen_samples('gaussian', targetLoc, opts.nPos_update*2, opts, 0.1, 5);
         r = overlap_ratio(pos_examples,targetLoc);
         pos_examples = pos_examples(r>opts.posThr_update,:);
@@ -284,6 +284,7 @@ for To = 2:nFrames;
         
         text(10,10,num2str(To),'Color','y', 'HorizontalAlignment', 'left', 'FontWeight','bold', 'FontSize', 30); 
         hold off;
+        pause(1);
         drawnow;
     end
 end
