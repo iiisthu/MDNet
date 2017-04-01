@@ -73,10 +73,10 @@ if display
 end
 
 %% Prepare training data for online update
-total_pos_data = cell(1,1,1,nFrames);
-total_neg_data = cell(1,1,1,nFrames);
-total_img_data = cell(1,1,1,nFrames);
-total_roi_data = cell(1,1,1,nFrames);
+total_pos_data = cell(1,nFrames);
+total_neg_data = cell(1,nFrames);
+total_img_data = cell(1,nFrames);
+total_roi_data = cell(1,nFrames);
 
 % total_pos_data_export = cell(1,1,1,nFrames);
 % total_neg_data_export = cell(1,1,1,nFrames);
@@ -194,7 +194,7 @@ for To = 2:nFrames;
     targetLoc = round(mean(targetLoc,1));
     result(To,:) = targetLoc;
     % extend search space in case of failure
-    if(target_score < 0.5)
+    if(target_score < opts.scoreThr)
         trans_f = min(1.5, 1.1*trans_f);
         %scale_f = min(1.5, 1.1*scale_f);
     else
@@ -202,12 +202,14 @@ for To = 2:nFrames;
     end
     
     %% Prepare training data
-    if(target_score>0.6)    
+    if(target_score> 0.9)    
         pos_examples = gen_samples('gaussian', targetLoc, opts.nPos_update*2, opts, 0.1, 5);
         r = overlap_ratio(pos_examples,targetLoc);
         pos_examples = pos_examples(r>opts.posThr_update,:);
         pos_examples = pos_examples(randsample(end,min(opts.nPos_update,end)),:);
-        
+        if size(pos_examples, 1) == 0
+            continue;
+        end
         neg_examples = gen_samples('uniform', targetLoc, opts.nNeg_update*2, opts, 2, 5);
         r = overlap_ratio(neg_examples,targetLoc);
         neg_examples = neg_examples(r<opts.negThr_update,:);
@@ -237,8 +239,8 @@ for To = 2:nFrames;
     end
 
     %% Network update
-    if((mod(To,opts.update_interval)==0 || target_score<0.5) && To~=nFrames)
-        if (target_score<0.5) % short-term update
+    if((mod(To,opts.update_interval)==0 || target_score<opts.scoreThr) && To~=nFrames)
+        if (target_score<opts.scoreThr) % short-term update
             pos_data = total_pos_data(success_frames(max(1,end-opts.nFrames_short+1):end));
             img_data = total_img_data(success_frames(max(1,end-opts.nFrames_short+1):end));
             roi_data = total_roi_data(success_frames(max(1,end-opts.nFrames_short+1):end));
@@ -251,7 +253,13 @@ for To = 2:nFrames;
         end
         
 %         fprintf('\n');
+        fprintf('size of pos:');
+        disp(size(pos_data));
         for i = 1: numel(pos_data)
+            fprintf('iter %d', i);
+            if size(pos_data{i},1) == 0
+                continue;
+            end
         	net_fc = mdnet_roi_finetune_hnm(net_fc,net_conv, img_data{i},roi_data{i}, pos_data{i},neg_data{i},...
                                         'maxiter',opts.maxiter_update,'learningRate',opts.learningRate_update, ...
 					'piecewise', opts.piecewise, 'derOutputs', opts.derOutputs, 'crop_mode', opts.crop_mode, ...

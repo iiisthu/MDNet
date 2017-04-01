@@ -24,7 +24,8 @@ opts.batch_neg = 96;
 
 % initial training policy
 opts.maxiter_init = 200;
-opts.learningRate_init = 0.0005 * [ones(opts.maxiter_init/2,1);0.1*ones(opts.maxiter_init/2,1)]; % x10 for fc6
+opts.learningRate_init = 0.0001 * [ones(opts.maxiter_init/2,1);0.1*ones(opts.maxiter_init/2,1)]; % x10 for fc6
+opts.scoreThr = 0.5;
 
 opts.nPos_init = 500;
 opts.nNeg_init = 5000;
@@ -40,7 +41,7 @@ opts.nNeg_update = 200;
 opts.posThr_update = 0.7;
 opts.negThr_update = 0.3;
 
-opts.update_interval = 10; % interval for long-term update
+opts.update_interval = 30; % interval for long-term update
 
 % data gathering policy
 opts.nFrames_long = 100; % long-term period
@@ -59,7 +60,7 @@ opts.visualize = false;
 opts.scale_factor = 1.05;
 opts.piecewise = 1;
 if opts.piecewise
-opts.derOutputs = {'losscls', 1, 'lossbbox', 0.2};
+opts.derOutputs = {'losscls', 1, 'lossbbox', 0.1};
 else
 opts.derOutputs = {'losscls', 1};
 end
