@@ -34,7 +34,7 @@ opts.sampling.scale_factor      = 1.05;
 opts.sampling.flip              = false;
 opts.sampling.val_ratio         = 0.95;
 % fast rcnn parameters
-opts.train.batchSize        = 4 ;
+opts.train.batchSize        = 8 ;
 
 opts.train.numEpochs        = 20 ; % #cycles (#iterations/#domains)
 opts.train.learningRate     = 0.01*[0.001*ones(5,1); 0.0001*ones(5,1);0.0001*ones(5,1)] ; % x10 for fc4-6
@@ -67,10 +67,10 @@ opts.train.derOutputs = {'losscls', 1} ;
 end
 %% Initializing MDNet
 K = numel(imdb.images.name);
-net = mdnet_roi_init_train(opts, K);
-% net = load(opts.netFile);
-% net = net.net;
-% net = dagnn.DagNN.loadobj(net);
+%net = mdnet_roi_init_train(opts, K);
+ net = load(opts.netFile);
+ net = net.net;
+ net = dagnn.DagNN.loadobj(net);
 
 %% Training MDNet
 % minibatch options
@@ -87,9 +87,9 @@ bopts.numThreads = opts.numFetchThreads;
 bopts.prefetch = opts.train.prefetch;
 
 
-[net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
-                           getBatch(bopts,i,k,b), ...
-                           opts.train) ;
+%[net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
+%                           getBatch(bopts,i,k,b), ...
+%                           opts.train) ;
 
 % --------------------------------------------------------------------
 %                                                               Deploy
@@ -225,7 +225,7 @@ for D = 1:length(seqList)
     	imdb.boxes.piou{i} =imdb_.boxes.piou;
 %        imdb.boxes.pgtidx = vertcat(imdb.boxes.pgtidx, imdb_.boxes.pgtidx);
     end
-    imdb = add_bboxreg_targets(imdb);
+    %imdb = add_bboxreg_targets(imdb);
 
     
 end

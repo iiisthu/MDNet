@@ -35,7 +35,6 @@ for i=1:length(imgs)
 %     fprintf('sampling %s ...\n', images{idx});
     images.name{i} = imgs{i};
     images.size(i,:) = imgSize;
-    boxes.gtbox{i} =  gts(i,:);
     boxes.gtlabel{i} =  fglabel;
     pos_examples = [targetLoc];
     if i >= opts.val_ratio* length(imgs)
@@ -70,7 +69,12 @@ for i=1:length(imgs)
         neg_examples = [neg_examples;neg];
         niou = [niou; r(ids)];
     end
-    
+    % convert to [x1,y1,x2,y2]
+    pos_examples = [pos_examples(:,1:2), pos_examples(:,3) + pos_examples(:,1) - 1,...
+			pos_examples(:,4) + pos_examples(:,2) - 1];
+    neg_examples = [neg_examples(:,1:2), neg_examples(:,3) + neg_examples(:,1) - 1, ...
+			neg_examples(:,4) + neg_examples(:,2) - 1];     
+    boxes.gtbox{i} =  [ gts(i,1:2), gts(i,1:2) + gts(i,3:4) - 1];
     boxes.piou{i} = [piou; niou];
     boxes.plabel{i} = [2*ones(length(piou),1); ones(length(niou),1)];
     boxes.pbox{i} = vertcat(pos_examples, neg_examples);

@@ -1,4 +1,6 @@
+%function [net, poss, hardnegs] = mdnet_finetune_hnm(net,img,targetLoc, pos_examples, neg_examples, pos_data,neg_data,varargin)
 function [net, poss, hardnegs] = mdnet_finetune_hnm(net,pos_data,neg_data,varargin)
+
 % MDNET_FINETUNE_HNM   
 % Train a CNN by SGD, with hard minibatch mining.
 %
@@ -125,14 +127,29 @@ for t=1:opts.maxiter
     hnegs = train_neg(hneg_start+ord(1:opts.batch_neg));
     im_hneg = neg_data(:,:,:,hnegs);
 %     fprintf('hnm: %d/%d, ', opts.batch_neg, opts.batchSize_hnm*opts.batchAcc_hnm) ;
-    hardnegs = [hardnegs; hnegs];
-    
+    hardnegs = [hardnegs, hnegs];
+   if 0
+         figure(2);
+         imshow(img);
+         hold on;
+        %bbox = neg_examples(1:100,:);
+         bbox = neg_examples(hnegs,:);
+         r = overlap_ratio(bbox, targetLoc);
+         bbox = bbox(r>0, :);
+         for i=1:size(bbox,1)
+            rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3), bbox(i,4)]), 'EdgeColor', 'b');
+            hold on;
+         end
+         hold off;
+         pause(0.1);
+    end
+        
     % ----------------------------------------------------------------------
     % get next image batch and labels
     % ----------------------------------------------------------------------
     poss = [poss; train_pos((t-1)*opts.batch_pos+1:t*opts.batch_pos)];
     
-    batch = cat(4,pos_data(:,:,:,train_pos((t-1)*opts.batch_pos+1:t*opts.batch_pos)),...
+    batch =   cat(4,pos_data(:,:,:,train_pos((t-1)*opts.batch_pos+1:t*opts.batch_pos)),...
         im_hneg);
     labels = [2*ones(opts.batch_pos,1,'single');ones(opts.batch_neg,1,'single')];
     if opts.useGpu
@@ -168,6 +185,6 @@ for t=1:opts.maxiter
     % print information
     objective(t) = gather(res(end).x)/opts.batchSize ;
     iter_time = toc(iter_time);
-%     fprintf('objective %.3f, %.2f s\n', mean(objective(1:t)), iter_time) ;
+    %fprintf('objective %.3f, %.2f s\n', mean(objective(1:t)), iter_time) ;
     
 end % next batch

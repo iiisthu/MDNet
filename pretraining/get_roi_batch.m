@@ -54,12 +54,10 @@ maxH = 0;
 
 pboxes   = cell(1,numel(batch));
 plabels  = cell(1,numel(batch));
-ptargets = cell(1,numel(batch));
 % get fg and bg rois
 for b=1:numel(batch)
   pbox   = imdb.boxes.pbox{k}{batch(b)};
   plabel = imdb.boxes.plabel{k}{batch(b)};
-  ptarget = imdb.boxes.ptarget{k}{batch(b)};
 
   if size(pbox,2)~=4
     error('wrong box size');
@@ -82,7 +80,6 @@ for b=1:numel(batch)
       p = pos(r(1:nBpos));
       bbox = pbox(p,:);
       label = plabel(p);
-      target = ptarget(p,:);
     end
     if nneg>0
       r = randperm(nneg);
@@ -90,12 +87,10 @@ for b=1:numel(batch)
       n = neg(r(1:nBneg));
       bbox = [bbox ; pbox(n,:)];
       label = [label ; plabel(n)];
-      target = [target ; ones(size(ptarget(n,:)))];
     end
   
   pboxes{b} = bbox;
   plabels{b} = label;
-  ptargets{b} = target;
 end
 
 labels = vertcat(plabels{:});
@@ -142,29 +137,30 @@ for b=1:numel(batch)
      hold on;
      for i=1:size(bbox,1)
         if plabel(i) == 2
-        rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3), bbox(i,4)]));
+        rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3) - bbox(i,1) + 1, bbox(i,4) - bbox(i,2) + 1]));
         hold on;
         end
      end
      hold off;
   end 
   [imre{b}, targetLoc, bboxes, R] = im_roi_crop(ims{b}, gtboxes{b}, bbox, opts.crop_mode, opts.crop_size, opts.crop_padding,opts.minIn, opts.maxIn, []);
-   if ~opts.visualize
-     figure(1);
-     imshow(uint8(ims{b}));
-     bb = [ targetLoc(1) / R(3) + R(1), targetLoc(2)/ R(4) + R(2), targetLoc(3:4)./R(3:4)];
-     rectangle('Position', round(bb));
+   if opts.visualize
+%     figure(1);
+%     imshow(uint8(ims{b}));
+%     bb = [ targetLoc(1:2)./R(3:4) + R(1:2), targetLoc(3:4)./R(3:4) + R(1:2)];
+%     rectangle('Position', round(bb));
      
      figure(2);
      imshow(uint8(imre{b}+128));
      hold on;
      for i=1:size(bboxes,1)
         if plabel(i) == 2
-        rectangle('Position',round([bboxes(i,1),bboxes(i,2), bboxes(i,3), bboxes(i,4)]));
+        rectangle('Position',round([bboxes(i,1),bboxes(i,2), bboxes(i,3) - bboxes(i,1) + 1, bboxes(i,4) - bboxes(i,2) + 1]));
         hold on;
         end
      end
-     fprintf('Input size: [%d,%d] [%d, %d]\n', size(imre{b},1), size(imre{b},2), round(bboxes(1, 3)), round(bboxes(1,4)));
+     fprintf('Input size: [%d,%d] [%d, %d]\n', size(imre{b},1), size(imre{b},2), round(bboxes(1, 3) - bboxes(1,1) + 1),...
+ round(bboxes(1,4) - bboxes(1,2) + 1));
      hold off;
   end 
   nB = size(bboxes,1);

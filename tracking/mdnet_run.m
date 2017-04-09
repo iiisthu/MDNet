@@ -70,11 +70,14 @@ pos_data = feat_conv(:,:,:,pos_idx);
 neg_data = feat_conv(:,:,:,neg_idx);
 ts = [ts, {toc(initts) - ts{end}}];
 
+target_conv = mdnet_features_convX(net_conv, img, targetLoc, opts);
 
 %% Learning CNN
 fprintf('  training cnn...\n');
-net_fc = mdnet_finetune_hnm(net_fc,pos_data,neg_data,opts,...
+[net_fc, poss,neg]= mdnet_finetune_hnm(net_fc, pos_data,neg_data,opts,...
     'maxiter',opts.maxiter_init,'learningRate',opts.learningRate_init);
+ 
+
 ts = [ts, {toc(initts) - ts{end}}];
 %% Initialize displayots
 if display
@@ -148,7 +151,7 @@ for To = 2:nFrames;
     else
         trans_f = opts.trans_f;
     end
-    
+    fprintf('score: %.3f', target_score);
     % bbox regression
     if(opts.bbreg && target_score>0)
         X_ = permute(gather(feat_conv(:,:,:,idx(1:5))),[4,3,1,2]);

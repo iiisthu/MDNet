@@ -40,9 +40,6 @@ crop_height = crop_size*ones(length(bboxes),1);
 if padding > 0 || use_square
     %figure(1); showboxesc(im/256, bboxes, 'b', '-');
     scale = crop_size/(crop_size - padding*2);
-    half_height = bboxes(:,4)/2;
-    half_width = bboxes(:,3)/2;
-    center = [bboxes(:,1)+half_width bboxes(:,2)+half_height];
 %    if use_square
 %        % make the box a tight square
 %        if half_height > half_width
@@ -51,9 +48,7 @@ if padding > 0 || use_square
 %            half_height = half_width;
 %        end
 %    end
-    bboxes = round([center center] + ...
-        [-half_width -half_height half_width half_height]*scale);
-    target = round([target(1), target(2), target(1) + target(3) , target(2) + target(4)]);
+    bboxes = round(bboxes*scale);
     unclipped_height = bboxes(:,4)-bboxes(:,2)+1;
     unclipped_width = bboxes(:,3)-bboxes(:,1)+1;
     %figure(1); showboxesc([], bboxes, 'r', '-');
@@ -78,13 +73,6 @@ if padding > 0 || use_square
     
     crop_height = min( crop_height, crop_size - pad_y1 );
     crop_width = min( crop_width, crop_size - pad_x1 );
-else % padding > 0 || square
-    half_height = bboxes(:,4)/2;
-    half_width = bboxes(:,3)/2;
-    center = [bboxes(:,1)+half_width bboxes(:,2)+half_height];
-    bboxes = round([center center] + ...
-        [-half_width -half_height half_width half_height]);
-    target = round([target(1), target(2), target(1) + target(3) , target(2) + target(4)]);
 end
 minLw = min(max(1, bboxes(:,1)));
 minLh = min(max(1, bboxes(:,2)));
@@ -121,6 +109,6 @@ else
     tmp(:,:,3) = tmp(:,:,3)-mean_rgb(3);
 end
 window = tmp;
-bboxes = [bboxes(:,1)*scale_w, bboxes(:, 2)*scale_h, (bboxes(:,3) - bboxes(:,1))*scale_w, (bboxes(:,4) - bboxes(:,2))*scale_h ];
-targetLoc = [targetLoc(1)*scale_w, targetLoc(2)*scale_h, (targetLoc(3) - targetLoc(1))*scale_w, (targetLoc(4) - targetLoc(2))*scale_h ];
+bboxes = [bboxes(:,1)*scale_w, bboxes(:, 2)*scale_h, bboxes(:,3)*scale_w, bboxes(:,4) *scale_h ];
+targetLoc = [targetLoc(1)*scale_w, targetLoc(2)*scale_h, targetLoc(3) *scale_w, targetLoc(4) *scale_h ];
 R = [minLw, minLh, scale_w, scale_h];

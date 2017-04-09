@@ -16,16 +16,18 @@ opts.net_file = net;
 opts.batchSize_test = 256; % <- reduce it in case of out of gpu memory
 
 % bounding box regression
-
+opts.bbreg = false;
+opts.bbreg_nSamples = 1000;
 % learning policy
 opts.batchSize = 128;
 opts.batch_pos = 32;
 opts.batch_neg = 96;
-
+opts.batchimg = 8;
 % initial training policy
-opts.maxiter_init = 200;
-opts.learningRate_init = 0.0001 * [ones(opts.maxiter_init/2,1);0.1*ones(opts.maxiter_init/2,1)]; % x10 for fc6
-opts.scoreThr = 0.5;
+opts.maxiter_init = 40;
+%opts.learningRate_init = 0.0001 * [ones(opts.maxiter_init/2,1);0.1*ones(opts.maxiter_init/2,1)]; % x10 for fc6
+opts.learningRate_init = 0.0001 * [ones(opts.maxiter_init,1)]; % x10 for fc6
+opts.scoreThr = 0;
 
 opts.nPos_init = 500;
 opts.nNeg_init = 5000;
@@ -33,7 +35,7 @@ opts.posThr_init = 0.7;
 opts.negThr_init = 0.5;
 
 % update policy
-opts.learningRate_update = 0.0005; % x10 for fc6
+opts.learningRate_update = 0.0001; % x10 for fc6
 opts.maxiter_update = 10;
 
 opts.nPos_update = 50;
@@ -41,7 +43,7 @@ opts.nNeg_update = 200;
 opts.posThr_update = 0.7;
 opts.negThr_update = 0.3;
 
-opts.update_interval = 30; % interval for long-term update
+opts.update_interval = 10; % interval for long-term update
 
 % data gathering policy
 opts.nFrames_long = 100; % long-term period
@@ -50,15 +52,15 @@ opts.nFrames_short = 20; % short-term period
 % cropping policy
 opts.crop_size = 107;
 opts.crop_mode = 'wrap';
-opts.crop_padding = 16;
+opts.crop_padding = 0;
 opts.maxIn = 400;
 opts.minIn = 200;
-opts.nmsThreshold = 0.3 ;
-opts.confThreshold = 0.5 ;
+opts.nmsThreshold = 0 ;
+opts.confThreshold = 0 ;
 opts.visualize = false;
 % scaling policy
 opts.scale_factor = 1.05;
-opts.piecewise = 1;
+opts.piecewise = 0;
 if opts.piecewise
 opts.derOutputs = {'losscls', 1, 'lossbbox', 0.1};
 else
@@ -99,10 +101,10 @@ end
 for i=pFc6:numel(net.params) - 2 
   if mod(i-pFc6, 2) == 0
      net.params(i).weightDecay = 1;
-     net.params(i).learningRate = 10;
+     net.params(i).learningRate = 20;
   else
      net.params(i).weightDecay = 0;
-     net.params(i).learningRate = 20;
+     net.params(i).learningRate = 40;
   end
 end
 
