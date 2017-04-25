@@ -35,8 +35,8 @@ end
 % defaults if padding is 0
 pad_w = 0;
 pad_h = 0;
-crop_width = crop_size*ones(length(bboxes),1);
-crop_height = crop_size*ones(length(bboxes),1);
+crop_width = crop_size*ones(size(bboxes,1),1);
+crop_height = crop_size*ones(size(bboxes,1),1);
 if padding > 0 || use_square
     %figure(1); showboxesc(im/256, bboxes, 'b', '-');
     scale = crop_size/(crop_size - padding*2);

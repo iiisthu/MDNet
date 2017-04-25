@@ -7,7 +7,7 @@
 
 clear;
 
-conf = genConfig('otb','Diving');
+conf = genConfig('otb','Biker');
 % conf = genConfig('vot2015','ball1');
 
 switch(conf.dataset)
@@ -26,7 +26,7 @@ ts_table = [{'dataset'},{'mdnet_init'},{'bbox_training'}, {'generate_examples'},
     {'ou_update'},{'ou_total'}, {'ou_total_expel_update'}
 	];
 [result, ts] = mdnet_run(conf.imgList, conf.gt(1,:), net, true);
-ts_table = [ts_table; [{'Diving'}, ts]];
+ts_table = [ts_table; [{'Bolt'}, ts]];
 % write timestamp to csv data
 [N,l] = size(ts_table);
 fid = fopen('time_statistics.csv', 'w') ;

@@ -18,7 +18,7 @@ config.seqName = seqName;
 switch(dataset)
     case {'otb'}
         % path to OTB dataset
-        benchmarkSeqHome ='/home/zhipengjia/otb/';
+        benchmarkSeqHome ='/disks/hdd1/shenh10/data/otb100/';
         
         % img path
         switch(config.seqName)

@@ -54,10 +54,12 @@ maxH = 0;
 
 pboxes   = cell(1,numel(batch));
 plabels  = cell(1,numel(batch));
+ptargets  = cell(1,numel(batch));
 % get fg and bg rois
 for b=1:numel(batch)
   pbox   = imdb.boxes.pbox{k}{batch(b)};
   plabel = imdb.boxes.plabel{k}{batch(b)};
+  ptarget = imdb.boxes.ptarget{k}{batch(b)};
 
   if size(pbox,2)~=4
     error('wrong box size');
@@ -80,6 +82,7 @@ for b=1:numel(batch)
       p = pos(r(1:nBpos));
       bbox = pbox(p,:);
       label = plabel(p);
+      target = ptarget(p,:);
     end
     if nneg>0
       r = randperm(nneg);
@@ -87,18 +90,19 @@ for b=1:numel(batch)
       n = neg(r(1:nBneg));
       bbox = [bbox ; pbox(n,:)];
       label = [label ; plabel(n)];
+      target = [target; ptarget(n,:)];
     end
   
   pboxes{b} = bbox;
   plabels{b} = label;
+  ptargets{b} = target;
 end
 
 labels = vertcat(plabels{:});
-%targets = vertcat(ptargets{:});
+targets = vertcat(ptargets{:});
 
 % rescale images and rois
 rois = [];
-targets = [];
 imre = cell(1,numel(batch));
 for b=1:numel(batch)
   imSize = size(ims{b});
@@ -165,7 +169,6 @@ for b=1:numel(batch)
   end 
   nB = size(bboxes,1);
   rois = [rois [b*ones(1,nB) ; bboxes' ] ];
-  targets = [targets; [bbox_transform(bboxes, targetLoc)]];
   maxH = max(maxH, size(imre{b},1));
   maxW = max(maxW, size(imre{b},2));
 end

@@ -37,8 +37,8 @@ opts.sampling.val_ratio         = 0.95;
 opts.train.batchSize        = 8 ;
 
 opts.train.numEpochs        = 20 ; % #cycles (#iterations/#domains)
-opts.train.learningRate     = 0.01*[0.001*ones(5,1); 0.0001*ones(5,1);0.0001*ones(5,1)] ; % x10 for fc4-6
-opts.train.gpus = [1,2] ;
+opts.train.learningRate     = 0.01*[0.001*ones(9,1);0.0001*ones(6,1)] ; % x10 for fc4-6
+opts.train.gpus = [] ;
 opts.train.numSubBatches = 1 ;
 opts.train.prefetch = false ; % does not help for two images in a batch
 opts.train.weightDecay = 0.0005 ;
@@ -68,9 +68,9 @@ end
 %% Initializing MDNet
 K = numel(imdb.images.name);
 %net = mdnet_roi_init_train(opts, K);
- net = load(opts.netFile);
- net = net.net;
- net = dagnn.DagNN.loadobj(net);
+net = load(opts.netFile);
+net = net.net;
+net = dagnn.DagNN.loadobj(net);
 
 %% Training MDNet
 % minibatch options
@@ -87,21 +87,21 @@ bopts.numThreads = opts.numFetchThreads;
 bopts.prefetch = opts.train.prefetch;
 
 
-%[net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
-%                           getBatch(bopts,i,k,b), ...
-%                           opts.train) ;
+[net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
+                           getBatch(bopts,i,k,b), ...
+                           opts.train) ;
 
 % --------------------------------------------------------------------
 %                                                               Deploy
 % --------------------------------------------------------------------
 if ~exist(opts.modelPath,'file')
-  net = deployFRCNN(net,imdb);
+  net = deployFRCNN(net,imdb,opts);
   net_ = net.saveobj() ;
   save(opts.modelPath, '-struct', 'net_') ;
   clear net_ ;
 end
 
-function net = deployFRCNN(net,imdb)
+function net = deployFRCNN(net,imdb,opts)
 % --------------------------------------------------------------------
 % function net = deployFRCNN(net)
 for l = numel(net.layers):-1:1
@@ -121,6 +121,7 @@ net.setLayerInputs('loss', { net.layers(ploss).inputs{1}, net.layers(ploss).inpu
 net.layers(ploss).block = dagnn.Loss(); 
 net.layers(ploss).block.attach(net, ploss) ;
 
+if opts.piecewise
 ppredbbox = find(arrayfun(@(a) strcmp(a.name, 'predbboxf'), net.params)==1);
 % domain-specific layers
 net.params(ppredbbox).value = 0.01 * randn(1,1,size(net.params(ppredbbox).value,3),8,'single');
@@ -130,7 +131,8 @@ net.setLayerInputs('lossbbox', { net.layers(ploss).inputs{1}, net.layers(ploss).
 net.layers(ploss).block = dagnn.LossSmoothL1(); 
 net.layers(ploss).block.attach(net, ploss) ;
 
-
+net.meta.bboxMeanStd = imdb.boxes.bboxMeanStd;
+end
 pfc8 = net.getLayerIndex('predcls') ;
 net.addLayer('probcls',dagnn.SoftMax(),net.layers(pfc8).outputs{1},...
   'probcls',{});
@@ -225,7 +227,7 @@ for D = 1:length(seqList)
     	imdb.boxes.piou{i} =imdb_.boxes.piou;
 %        imdb.boxes.pgtidx = vertcat(imdb.boxes.pgtidx, imdb_.boxes.pgtidx);
     end
-    %imdb = add_bboxreg_targets(imdb);
+    imdb = add_bboxreg_targets(imdb);
 
     
 end
@@ -249,7 +251,7 @@ for i = 1:numel(net.params)
   end
   
 end
-for i=pfc4:numel(net.params)
+for i=pfc4:numel(net.params) - 2
   if mod(i-pfc4, 2) == 0
      net.params(i).weightDecay = 1;
      net.params(i).learningRate = 10;
@@ -257,6 +259,15 @@ for i=pfc4:numel(net.params)
      net.params(i).weightDecay = 0;
      net.params(i).learningRate = 20;
   end
+end
+for i = numel(net.params)-1: numel(net.params)
+   if i == numel(net.params)-1
+     net.params(i).weightDecay = 1;
+     net.params(i).learningRate = 20;
+   else
+     net.params(i).weightDecay = 0;
+     net.params(i).learningRate = 40;
+   end
 end
 
 pFc6 = find(arrayfun(@(a) strcmp(a.name, 'predclsf'), net.params)==1);
@@ -284,6 +295,8 @@ net.params(ppredbbox).value = 0.01 * randn(1,1,size(net.params(ppredbbox).value,
 net.params(ppredbbox+1).value = zeros(1, 8, 'single');
 
 end
+
+
 end
 
 net.rebuild();
@@ -332,7 +345,7 @@ if ~isfield(imdb.boxes,'bboxMeanStd') || isempty(imdb.boxes.bboxMeanStd)
   class_counts = eps;
   for k=1:numel(imdb.boxes.ptarget)
     for i=1:numel(imdb.boxes.ptarget{k})
-      pos =  (imdb.boxes.plabel{k}{i}>0) ;
+      pos =  (imdb.boxes.plabel{k}{i}~=bgid) ;
       labels = imdb.boxes.plabel{k}{i}(pos);
       targets = imdb.boxes.ptarget{k}{i}(pos,:);
       cls_inds = (labels~=bgid);

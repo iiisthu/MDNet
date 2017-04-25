@@ -7,7 +7,7 @@ function [ net_conv, net_fc, opts] = mdnet_roi_init(image, net)
 
 %% set opts
 % use gpu
-opts.gpus = [3];
+opts.gpus = [5];
 
 % model def
 opts.net_file = net;
@@ -24,7 +24,7 @@ opts.batch_pos = 32;
 opts.batch_neg = 96;
 opts.batchimg = 8;
 % initial training policy
-opts.maxiter_init = 40;
+opts.maxiter_init = 100;
 %opts.learningRate_init = 0.0001 * [ones(opts.maxiter_init/2,1);0.1*ones(opts.maxiter_init/2,1)]; % x10 for fc6
 opts.learningRate_init = 0.0001 * [ones(opts.maxiter_init,1)]; % x10 for fc6
 opts.scoreThr = 0;
@@ -60,9 +60,9 @@ opts.confThreshold = 0 ;
 opts.visualize = false;
 % scaling policy
 opts.scale_factor = 1.05;
-opts.piecewise = 0;
+opts.piecewise = 1;
 if opts.piecewise
-opts.derOutputs = {'losscls', 1, 'lossbbox', 0.1};
+opts.derOutputs = {'losscls', 1, 'lossbbox', 1};
 else
 opts.derOutputs = {'losscls', 1};
 end
@@ -98,7 +98,7 @@ for i = 1:pFc6 - 1
   end
 
 end
-for i=pFc6:numel(net.params) - 2 
+for i=pFc6:numel(net.params) 
   if mod(i-pFc6, 2) == 0
      net.params(i).weightDecay = 1;
      net.params(i).learningRate = 20;
@@ -131,6 +131,7 @@ net_fc = dagnn.DagNN.loadobj(net_fc);
 net_conv.rebuild();
 net_fc.rebuild();
 if numel(opts.gpus) > 0
+gpuDevice(opts.gpus) ;
 net_conv.move('gpu');
 net_fc.move('gpu');
 

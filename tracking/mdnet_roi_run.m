@@ -97,6 +97,8 @@ if display
     text(10,10,'1','Color','y', 'HorizontalAlignment', 'left', 'FontWeight','bold', 'FontSize', 30);
     hold off;
     drawnow;
+    fname = sprintf('fast_mdnet_%d.png', 1);
+    saveas(gcf, fname);
 end
 
 %% Prepare training data for online update
@@ -129,6 +131,7 @@ net_fc.mode = 'test' ;
 
 ts_ou_acc = zeros(bk,1);
 ts_counts = zeros(bk,1);
+target_score = 0;
 for To = 2:nFrames;
     fprintf('Processing frame %d/%d... ', To, nFrames);
     ts_ou = zeros(bk,1);
@@ -164,10 +167,14 @@ for To = 2:nFrames;
     if opts.piecewise
         pbbox = squeeze(gather(net_fc.vars(net_fc.getVarIndex('predbbox')).value)) ;
         cdeltas = pbbox(5:8,:);
-        cboxes = bbox_transform_inv(bboxes_ori(2:end,:)', cdeltas');
-        cls_dets = [cboxes cprobs'] ;
-        keep = bbox_nms(cls_dets, opts.nmsThreshold) ;
-        cls_dets = cls_dets(keep, :) ;
+        cdeltas = bsxfun(@plus,cdeltas',net_fc.meta.bboxMeanStd{1});
+        cdeltas = bsxfun(@times,cdeltas,net_fc.meta.bboxMeanStd{2});
+        cboxes = bbox_transform_inv(bboxes_ori(2:end,:)', cdeltas);
+        
+        %cls_dets = [cboxes cprobs'] ;
+        %keep = bbox_nms(cls_dets, opts.nmsThreshold) ;
+        [~, keep] = sort(cprobs,'descend');
+        cls_dets = [cboxes(keep, :) cprobs(keep)'];
         sel_boxes = find(cls_dets(:,end) >= opts.confThreshold) ;
         if ~isempty(sel_boxes)
         % final target 
@@ -176,16 +183,17 @@ for To = 2:nFrames;
             targetLoc = [targetLoc./repmat([R(3:4), R(3:4)],size(targetLoc,1),1) + repmat([R(1:2),R(1:2)], size(targetLoc, 1),1) ];
         else
             thisLoc = [cls_dets(1, 1:end-1)./[R(3:4), R(3:4)] + [R(1:2),R(1:2)]];
-            w = 1/(1+exp(target_score - cls_dets(1,end)));
-            targetLoc = 2*[(1-w)* targetLoc; w*thisLoc];
-            target_score = (1-w)*target_score + w*cls_dets(1,end);
+            %w = 1/(1+exp(target_score - cls_dets(1,end)));
+            %targetLoc = 2*[(1-w)* targetLoc; w*thisLoc];
+            targetLoc = [thisLoc];
+            target_score = cls_dets(1,end);
         end
     else
         [sprobs ,ord]  = sort(cprobs, 'descend');
         sel_boxes = find(sprobs >= opts.confThreshold);
         if ~isempty(sel_boxes)
-            targetLoc = bboxes_ori(2:end, ord(sel_boxes(1:min(5,end))))';
-            target_score = mean(sprobs(sel_boxes(1:min(5,end))));
+            targetLoc = bboxes_ori(2:end, ord(sel_boxes(1:min(3,end))))';
+            target_score = mean(sprobs(sel_boxes(1:min(3,end))));
             % bbox regression
             if(opts.bbreg && target_score>opts.scoreThr)
                feat_rois = squeeze(gather(net_fc.vars(net_fc.getVarIndex('xRP')).value)) ;
@@ -342,8 +350,11 @@ for To = 2:nFrames;
         
         text(10,10,num2str(To),'Color','y', 'HorizontalAlignment', 'left', 'FontWeight','bold', 'FontSize', 30); 
         hold off;
-        if To > 0
-            pause(1);
+        for l = 0:0.1:1
+        if  To == round(100*l)
+            fname = sprintf('fast_mdnet_%d.png', To);
+            saveas(gcf, fname);
+        end
         end
         drawnow;
     end

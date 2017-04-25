@@ -156,7 +156,7 @@ for t=1:opts.maxiter
         net_conv.eval({'input', img_batch});
         feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ; 
         new_box = [round(target_batch(1:2)/16) - 1, round(target_batch(3:4)/16) - 1];
-        target_feat = feat(new_box(1):new_box(3), new_box(2):new_box(4),:);
+%        target_feat = feat(new_box(1):new_box(3), new_box(2):new_box(4),:);
         rois = single(neg_batch)';        
         % Evaluate network either on CPU or GPU.
         if numel(opts.gpus) > 0
@@ -293,6 +293,8 @@ for t=1:opts.maxiter
        end
        btarget = bbox_transform(bbox_batch(pos_in_batch,2:end),btargets);
     % regression error only for positives
+       btarget = bsxfun(@minus,btarget,net.meta.bboxMeanStd{1});
+       btarget = bsxfun(@rdivide,btarget,net.meta.bboxMeanStd{2});
        instance_weights = zeros(1,1,8,size(batch,1),'single');
        targets = zeros(1,1,8,size(batch,1),'single');
        targets(1,1,5:8,pos_in_batch) = btarget';
@@ -331,10 +333,12 @@ for t=1:opts.maxiter
     loss_cls(t) = gather(loss)/opts.batchSize ;
     if opts.piecewise
     	lossb = squeeze(gather(net.vars(net.getVarIndex('lossbbox')).value)) ;
+        probbox = squeeze(gather(net.vars(net.getVarIndex('predbbox')).value)) ;
+        bbox_target = squeeze(gather(targets));
     	loss_bbox(t) = gather(lossb)/opts.batchSize ;
     end
     iter_time = toc(iter_time);
-    fprintf('iter: %d, cls_loss %.3f, bbox_loss: %.3f, time %.2f s\n', t, loss_cls(t), loss_bbox(t), iter_time) ;
+    fprintf('iter: %d, cls_loss %.3f, bbox_loss: %.6f, time %.2f s\n', t, loss_cls(t), loss_bbox(t), iter_time) ;
     net.reset();
     
 end % next batch

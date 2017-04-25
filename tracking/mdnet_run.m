@@ -20,6 +20,7 @@ if(nargin<4), display = true; end
 fprintf('Initialization...\n');
 initts = tic;
 ts = [];
+acc = 0;
 nFrames = length(images);
 
 img = imread(images{1});
@@ -28,7 +29,8 @@ targetLoc = region;
 result = zeros(nFrames, 4); result(1,:) = targetLoc;
 
 [net_conv, net_fc, opts] = mdnet_init(img, net);
-ts = [ts, {toc(initts)}];
+ts = [ts, {toc(initts) - acc}];
+acc = acc + ts{end};
 %% Train a bbox regressor
 if(opts.bbreg)
     pos_examples = gen_samples('uniform_aspect', targetLoc, opts.bbreg_nSamples*10, opts, 0.3, 10);
@@ -43,8 +45,8 @@ if(opts.bbreg)
     bbox_gt = repmat(targetLoc,size(pos_examples,1),1);
     bbox_reg = train_bbox_regressor(X, bbox, bbox_gt);
 end
-ts = [ts, {toc(initts) - ts{end}}];
-
+ts = [ts, {toc(initts) - acc}];
+acc = acc + ts{end};
 %% Extract training examples
 fprintf('  extract features...\n');
 
@@ -63,13 +65,14 @@ neg_examples = neg_examples(randsample(end,min(opts.nNeg_init,end)),:);
 examples = [pos_examples; neg_examples];
 pos_idx = 1:size(pos_examples,1);
 neg_idx = (1:size(neg_examples,1)) + size(pos_examples,1);
-ts = [ts, {toc(initts) - ts{end}}];
+ts = [ts, {toc(initts) - acc}];
+acc = acc + ts{end};
 % extract conv3 features
 feat_conv = mdnet_features_convX(net_conv, img, examples, opts);
 pos_data = feat_conv(:,:,:,pos_idx);
 neg_data = feat_conv(:,:,:,neg_idx);
-ts = [ts, {toc(initts) - ts{end}}];
-
+ts = [ts, {toc(initts) - acc}];
+acc = acc + ts{end};
 target_conv = mdnet_features_convX(net_conv, img, targetLoc, opts);
 
 %% Learning CNN
@@ -78,7 +81,8 @@ fprintf('  training cnn...\n');
     'maxiter',opts.maxiter_init,'learningRate',opts.learningRate_init);
  
 
-ts = [ts, {toc(initts) - ts{end}}];
+ts = [ts, {toc(initts) - acc}];
+acc = acc + ts{end};
 %% Initialize displayots
 if display
     figure(2);
@@ -91,8 +95,9 @@ if display
     text(10,10,'1','Color','y', 'HorizontalAlignment', 'left', 'FontWeight','bold', 'FontSize', 30);
     hold off;
     drawnow;
+    fname = sprintf('mdnet_%d.png', 1);
+    saveas(gcf, fname);
 end
-
 %% Prepare training data for online update
 total_pos_data = cell(1,1,1,nFrames);
 total_neg_data = cell(1,1,1,nFrames);
@@ -115,7 +120,9 @@ total_neg_data{1} = feat_conv(:,:,:,neg_idx);
 success_frames = 1;
 trans_f = opts.trans_f;
 scale_f = opts.scale_f;
-ts = [ts, {toc(initts) - ts{end}}];
+disp(toc(initts) - ts{end});
+ts = [ts, {toc(initts) - acc}];
+acc = acc + ts{end};
 
 %% Main loop
 bk = 9;
@@ -238,6 +245,12 @@ for To = 2:nFrames;
         text(10,10,num2str(To),'Color','y', 'HorizontalAlignment', 'left', 'FontWeight','bold', 'FontSize', 30); 
         hold off;
         drawnow;
+        for l = 0:0.1:1
+        if  To == round(100*l)
+            fname = sprintf('mdnet_%d.png', To);
+            saveas(gcf, fname);
+        end
+        end
     end
 end
 

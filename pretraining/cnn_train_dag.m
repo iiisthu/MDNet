@@ -242,6 +242,11 @@ for k = 1:numel(params.frame_list)
       net.mode = 'normal' ;
       net.accumulateParamDers = (s ~= 1) ;
       net.eval(inputs, params.derOutputs, 'holdOn', s < params.numSubBatches) ;
+      pfc6 = (arrayfun(@(a) strcmp(a.name, 'predbbox'), net.vars)==1);
+      probbox = squeeze(gather(net.vars(pfc6).value));
+      pfc7 = (arrayfun(@(a) strcmp(a.name, 'targets'), net.vars)==1);
+
+      targets = squeeze(gather(net.vars(pfc7).value));
       etime = toc(start) - btime;
     else
       net.mode = 'test' ;
