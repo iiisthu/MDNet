@@ -26,7 +26,7 @@ opts.sampling.crop_mode         = 'warp';
 opts.sampling.numFetchThreads   = 8 ;
 opts.sampling.posRange          = [0.7 1];
 opts.sampling.negRange          = [0 0.5];
-opts.sampling.crop_padding      = 16;
+opts.sampling.crop_padding      = 0;
 
 opts.sampling.posPerFrame       = 50;
 opts.sampling.negPerFrame       = 200;
@@ -37,8 +37,9 @@ opts.sampling.val_ratio         = 0.95;
 opts.train.batchSize        = 8 ;
 
 opts.train.numEpochs        = 20 ; % #cycles (#iterations/#domains)
-opts.train.learningRate     = 0.01*[0.001*ones(9,1);0.0001*ones(6,1)] ; % x10 for fc4-6
-opts.train.gpus = [] ;
+opts.train.learningRate     = 0.001*[0.001*ones(9,1);0.0001*ones(6,1)] ; % x10 for fc4-6
+opts.train.gpus = [2,3] ;
+%opts.train.gpus = [] ;
 opts.train.numSubBatches = 1 ;
 opts.train.prefetch = false ; % does not help for two images in a batch
 opts.train.weightDecay = 0.0005 ;
@@ -67,25 +68,28 @@ opts.train.derOutputs = {'losscls', 1} ;
 end
 %% Initializing MDNet
 K = numel(imdb.images.name);
-%net = mdnet_roi_init_train(opts, K);
-net = load(opts.netFile);
-net = net.net;
-net = dagnn.DagNN.loadobj(net);
+net = mdnet_roi_init_train(opts, K);
+%net = load(opts.netFile);
+%net = net.net;
+%net = dagnn.DagNN.loadobj(net);
 
 %% Training MDNet
 % minibatch options
 bopts.gpus             = opts.train.gpus;
-bopts.batch_pos        = 32;
-bopts.batch_neg        = 96;
-bopts.maxIn = 400;
-bopts.minIn = 200;
+bopts.batch_pos        = 32*4;
+bopts.batch_neg        = 96*4;
+bopts.crop_size        = 400;
+bopts.crop_padding     = opts.sampling.crop_padding;
+bopts.crop_mode     = opts.sampling.crop_mode;
 bopts.bgLabel = 1;
 bopts.piecewise = opts.piecewise;
 bopts.visualize = 0;
 bopts.interpolation = net.meta.normalization.interpolation;
 bopts.numThreads = opts.numFetchThreads;
 bopts.prefetch = opts.train.prefetch;
-
+bopts.scale_factor = opts.sampling.scale_factor;
+bopts.scale_range  = 10;
+bopts.trans_range  = 2;
 
 [net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
                            getBatch(bopts,i,k,b), ...
@@ -149,7 +153,7 @@ function inputs = getBatch(opts, imdb, k,  batch)
 if isempty(batch)
   return;
 end
-[im,rois,labels,btargets] = get_roi_batch(opts, imdb, k, batch, 'maxIn', opts.maxIn, 'minIn', opts.minIn);
+[im,rois,labels,btargets] = get_roi_batch(opts, imdb, k, batch);
 nb = numel(labels);
 if opts.piecewise
 % regression error only for positives

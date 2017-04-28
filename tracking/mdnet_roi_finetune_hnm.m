@@ -130,37 +130,33 @@ for t=1:opts.maxiter
     for h=1:opts.batchAcc_hnm
         batch = new_neg_data(train_neg(hneg_start+(h-1)*opts.batchSize_hnm+1:hneg_start+h*opts.batchSize_hnm), :);
         neg_batch = [];
-        R_batch = [];
         target_batch = [];
         maxH = 0;
         maxW = 0;
         img_tmp = {};
         for i = 1:numel(img)
              matched_neg = find( batch(:,1) == i );
-             [img_crop, target_crop, bboxes, R] = im_roi_crop(img{i}, targetLoc{i}, batch(matched_neg, 2:end), opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
-             img_tmp{i} = img_crop;
-             maxH = max(maxH, size(img_crop, 1));
-             maxW = max(maxW, size(img_crop, 2));
-             neg_batch = cat(1,neg_batch, [ batch(matched_neg, 1), bboxes]);
-             R_batch = cat(1,R_batch, R);
-             target_batch = cat(1,target_batch, target_crop);
+             img_tmp{i} = img{i};
+             maxH = max(maxH, size(img_tmp{i}, 1));
+             maxW = max(maxW, size(img_tmp{i}, 2));
+             neg_batch = cat(1,neg_batch, batch(matched_neg, :));
+             target_batch = cat(1,target_batch, targetLoc{i});
         end
-	img_batch = zeros(maxH, maxW, 3, numel(img), 'single');
+	img_batch = zeros(maxH, maxW, size(img{1},3), numel(img), 'single');
         for i = 1:numel(img_tmp) 
              img_batch(1:size(img_tmp{i}, 1), 1:size(img_tmp{i},2), :, i) = single(img_tmp{i});
         end
         if numel(opts.gpus) > 0
            img_batch = gpuArray(img_batch);
         end
-        net_conv.mode = 'test';
-        net_conv.eval({'input', img_batch});
-        feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ; 
+        
         new_box = [round(target_batch(1:2)/16) - 1, round(target_batch(3:4)/16) - 1];
-%        target_feat = feat(new_box(1):new_box(3), new_box(2):new_box(4),:);
+        new_ex_box = [round(neg_batch(:,2:3)/16) - 1, round(neg_batch(:,4:5)/16) - 1];
+        target_feat = img_batch(new_box(1):new_box(3), new_box(2):new_box(4),:);
         rois = single(neg_batch)';        
         % Evaluate network either on CPU or GPU.
         if numel(opts.gpus) > 0
-	    feat = gpuArray(feat);
+	    feat = gpuArray(img_batch);
             rois = gpuArray(rois) ;
         end
         net.mode = 'test' ;
@@ -202,9 +198,9 @@ for t=1:opts.maxiter
             hold on;
          end
 
-         %bbox = im_hneg(find(im_hneg(1:10,1) == 1), 2:end);
-         bbox = new_neg_data(train_neg(hneg_start+1:hneg_start+opts.batchAcc_hnm*opts.batchSize_hnm), :);
-         bbox = bbox(find(bbox(:,1) == 1), 2:end);
+         bbox = im_hneg(find(im_hneg(1:10,1) == 1), 2:end);
+         %bbox = new_neg_data(train_neg(hneg_start+1:hneg_start+opts.batchAcc_hnm*opts.batchSize_hnm), :);
+         %bbox = bbox(find(bbox(:,1) == 1), 2:end);
          r = roi_overlap_ratio(bbox, targetLoc{1});
          bbox = bbox(r>0,:);
          bbox = [ bbox(:, 1:2), bbox(:,3:4) - bbox(:,1:2) + 1];
@@ -226,14 +222,12 @@ for t=1:opts.maxiter
     img_tmp = {};
     for l = 1:numel(img)
          matched = find( batch(:,1) == l );
-         [img_crop, target_crop, bboxes, R] = im_roi_crop(img{l}, targetLoc{l}, batch(matched, 2:end), opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
-         img_tmp{l} = img_crop;
+         img_tmp{l} = img{l};
          label_batch = [label_batch; 2*ones(numel(find(matched <= opts.batch_pos)), 1, 'single'); ones(numel(find(matched > opts.batch_pos)), 1, 'single')];
-         maxH = max(maxH, size(img_crop, 1));
-         maxW = max(maxW, size(img_crop, 2));
-         bbox_batch = cat(1,bbox_batch, [ batch(matched, 1), bboxes]);
-         R_batch = cat(1,R_batch, R);
-         target_batch = cat(1,target_batch, target_crop);
+         maxH = max(maxH, size(img{l}, 1));
+         maxW = max(maxW, size(img{l}, 2));
+         bbox_batch = cat(1,bbox_batch, batch(matched, :));
+         target_batch = cat(1,target_batch, targetLoc{l});
     if opts.visualize
          figure(3);
          imshow(uint8(img_tmp{l})+128);
@@ -266,19 +260,13 @@ for t=1:opts.maxiter
     end
  
      end
-     img_batch = zeros(maxH, maxW, 3, numel(img), 'single');
+     img_batch = zeros(maxH, maxW,size(img{1},3), numel(img), 'single');
      for i = 1:numel(img_tmp) 
          img_batch(1:size(img_tmp{i}, 1), 1:size(img_tmp{i},2), :, i) = single(img_tmp{i});
      end
 
-    if numel(opts.gpus) > 0
-       img_batch = gpuArray(img_batch);
-    end
-    net_conv.eval({'input', img_batch});
-
-    feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ;
-
-
+        new_box = [round(target_batch(1:2)/16) - 1, round(target_batch(3:4)/16) - 1];
+        new_ex_box = [round(bbox_batch(:,2:3)/16) - 1, round(bbox_batch(:,4:5)/16) - 1];
 
     if opts.piecewise
        pos_in_batch = find(label_batch == 2);
@@ -305,7 +293,7 @@ for t=1:opts.maxiter
        end
     end
     bbox_batch = single(bbox_batch');
-
+    feat = img_batch;
     if numel(opts.gpus) > 0
         feat = gpuArray(feat);
         bbox_batch = gpuArray(bbox_batch) ;

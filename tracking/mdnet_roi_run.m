@@ -78,9 +78,15 @@ neg_examples = neg_examples(randsample(end,min(opts.nNeg_init,end)),:);
 
 %% Learning CNN
 fprintf('  training cnn...\n');
+    if numel(opts.gpus) > 0
+       window = gpuArray(single(img));
+    end
+ 
+net_conv.mode = 'test';
+net_conv.eval({'input', window});
+feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ; 
 
-
-net_fc = mdnet_roi_finetune_hnm(net_fc,net_conv, {img}, {targetLoc}, {pos_examples},{neg_examples},...
+net_fc = mdnet_roi_finetune_hnm(net_fc,net_conv, {feat}, {targetLoc}, {pos_examples},{neg_examples},...
     'maxiter',opts.maxiter_init,'learningRate',opts.learningRate_init, ...
     'piecewise', opts.piecewise, 'derOutputs', opts.derOutputs, 'crop_mode', opts.crop_mode, ...
 'crop_size', opts.crop_size, 'crop_padding',opts.crop_padding, 'maxIn', opts.maxIn, 'minIn', opts.minIn, 'gpus', opts.gpus);
@@ -114,7 +120,7 @@ r = roi_overlap_ratio(neg_examples,targetLoc);
 neg_examples = neg_examples(r<opts.negThr_init,:);
 neg_examples = neg_examples(randsample(end,min(opts.nNeg_update,end)),:);
 
-total_img_data{1} = single(img);
+total_img_data{1} = single(feat);
 total_roi_data{1} = single(targetLoc);
 total_pos_data{1} = single(pos_examples);
 total_neg_data{1} = single(neg_examples);
@@ -265,9 +271,15 @@ for To = 2:nFrames;
         neg_examples = neg_examples(r<opts.negThr_update,:);
         neg_examples = neg_examples(randsample(end,min(opts.nNeg_update,end)),:);
         
+        if numel(opts.gpus) > 0
+           window = gpuArray(img) ;
+        end
+        net_conv.eval({'input', window});
+        feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ;
+       
         total_pos_data{To} = pos_examples;
         total_neg_data{To} = neg_examples;
-        total_img_data{To} = img; 
+        total_img_data{To} = feat; 
         total_roi_data{To} = single(targetLoc);
 
 %       total_pos_data_export{To} = total_pos_data{To};

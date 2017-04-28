@@ -7,15 +7,10 @@ function [imo, rois, labels, targets] = get_roi_batch(opts, imdb, k, batch, vara
 %
 %  
 %boxes = [pos_idx, pos_boxes; neg_idx, neg_boxes];
-opts.crop_size     = 107;
-opts.maxIn = 400;
-opts.minIn = 107;
-opts.crop_mode      = 'warp' ;
-opts.crop_padding   = 0 ;
 opts.numFetchThreads     = 1 ;
 opts.prefetch = false;
-opts.batch_pos        = floor(32/numel(batch));
-opts.batch_neg        = floor(96/numel(batch));
+opts.batch_pos        = floor(opts.batch_pos/numel(batch));
+opts.batch_neg        = floor(opts.batch_neg/numel(batch));
 opts = vl_argparse(opts, varargin);
 images = {imdb.images.name{k}{batch}}; 
 gtboxes = {imdb.boxes.gtbox{k}{batch}};
@@ -100,7 +95,20 @@ end
 
 labels = vertcat(plabels{:});
 targets = vertcat(ptargets{:});
-
+% chose ratio
+target = gtboxes{1};
+center = [(target(1) + target(3))/2, (target(2) + target(4))/2,(target(3) - target(1) + 1),...
+target(4) - target(2) + 1];
+crop_range = (opts.trans_range + opts.scale_factor^opts.scale_range);
+minLw = round(max(1,  center(1) - center(3)*crop_range));
+minLh = round(max(1,  center(2) - center(4)*crop_range));
+maxRw = round(min(center(1) + center(3)*crop_range, size(ims{1}, 2)));
+maxRh = round(min(center(2) + center(4)*crop_range, size(ims{1}, 1)));
+ratio = (maxRw - minLw + 1)/(maxRh - minLh + 1);
+aspect_ratio = [0.5, 1, 2];
+[~, as] = min(abs(ratio - aspect_ratio));
+as_chosen = aspect_ratio(as);
+%fprintf('actual ratio: %.2f, chosen ratio: %.2f', ratio, as_chosen);
 % rescale images and rois
 rois = [];
 imre = cell(1,numel(batch));
@@ -134,7 +142,6 @@ for b=1:numel(batch)
   % adapt bounding boxes into new coord
   bbox = pboxes{b};
   plabel = plabels{b};
-  bbox = max(bbox, 0);
   if opts.visualize
      figure(1);
      imshow(uint8(ims{b}));
@@ -147,7 +154,8 @@ for b=1:numel(batch)
      end
      hold off;
   end 
-  [imre{b}, targetLoc, bboxes, R] = im_roi_crop(ims{b}, gtboxes{b}, bbox, opts.crop_mode, opts.crop_size, opts.crop_padding,opts.minIn, opts.maxIn, []);
+
+  [imre{b}, targetLoc, bboxes, R] = im_roi_crop(ims{b}, gtboxes{b}, bbox, opts.crop_mode, opts.crop_size, opts.crop_padding, as_chosen, crop_range, []);
    if opts.visualize
 %     figure(1);
 %     imshow(uint8(ims{b}));
@@ -157,22 +165,27 @@ for b=1:numel(batch)
      figure(2);
      imshow(uint8(imre{b}+128));
      hold on;
+     l=1;
      for i=1:size(bboxes,1)
-        if plabel(i) == 2
-        rectangle('Position',round([bboxes(i,1),bboxes(i,2), bboxes(i,3) - bboxes(i,1) + 1, bboxes(i,4) - bboxes(i,2) + 1]));
-        hold on;
-        end
+         if plabel(i) == 2
+            l=i;
+            rectangle('Position',round([bboxes(i,1),bboxes(i,2), bboxes(i,3) - bboxes(i,1) + 1, bboxes(i,4) - bboxes(i,2) + 1]),'EdgeColor','r');
+         else
+            rectangle('Position',round([bboxes(i,1),bboxes(i,2), bboxes(i,3) - bboxes(i,1) + 1, bboxes(i,4) - bboxes(i,2) + 1]),'EdgeColor','b');
+         end
+            hold on;
      end
-     fprintf('Input size: [%d,%d] [%d, %d]\n', size(imre{b},1), size(imre{b},2), round(bboxes(1, 3) - bboxes(1,1) + 1),...
- round(bboxes(1,4) - bboxes(1,2) + 1));
+     fprintf('Input size: [%d,%d] [%d, %d]\n', size(imre{b},1), size(imre{b},2), round(bboxes(l, 3) - bboxes(l,1) + 1),...
+ round(bboxes(l,4) - bboxes(l,2) + 1));
      hold off;
+     pause(1);
   end 
   nB = size(bboxes,1);
   rois = [rois [b*ones(1,nB) ; bboxes' ] ];
   maxH = max(maxH, size(imre{b},1));
   maxW = max(maxW, size(imre{b},2));
 end
-fprintf('[maxH, maxW]: [%d, %d]', round(maxH), round(maxW));
+%fprintf('[maxH, maxW]: [%d, %d]', round(maxH), round(maxW));
 imo = zeros(maxH,maxW,3,numel(batch),'single');
 for b=1:numel(batch)
     imt = imre{b};
