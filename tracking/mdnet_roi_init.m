@@ -22,12 +22,12 @@ opts.bbreg_nSamples = 1000;
 opts.batchSize = 128;
 opts.batch_pos = 32;
 opts.batch_neg = 96;
-opts.batchimg = 8;
+opts.batchimg = 100;
 % initial training policy
-opts.maxiter_init = 100;
+opts.maxiter_init = 50;
 %opts.learningRate_init = 0.0001 * [ones(opts.maxiter_init/2,1);0.1*ones(opts.maxiter_init/2,1)]; % x10 for fc6
 opts.learningRate_init = 0.0001 * [ones(opts.maxiter_init,1)]; % x10 for fc6
-opts.scoreThr = 0;
+opts.scoreThr = 0.5;
 
 opts.nPos_init = 500;
 opts.nNeg_init = 5000;
@@ -46,18 +46,16 @@ opts.negThr_update = 0.3;
 opts.update_interval = 10; % interval for long-term update
 
 % data gathering policy
-opts.nFrames_long = 100; % long-term period
+opts.nFrames_long = 50; % long-term period
 opts.nFrames_short = 20; % short-term period
 
 % cropping policy
-opts.crop_size = 107;
+opts.crop_size = 800;
 opts.crop_mode = 'wrap';
 opts.crop_padding = 0;
-opts.maxIn = 400;
-opts.minIn = 200;
 opts.nmsThreshold = 0 ;
 opts.confThreshold = 0 ;
-opts.visualize = false;
+opts.debug = false;
 % scaling policy
 opts.scale_factor = 1.05;
 opts.piecewise = 1;

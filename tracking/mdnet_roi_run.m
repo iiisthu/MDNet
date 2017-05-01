@@ -33,7 +33,8 @@ if(opts.bbreg)
     r = roi_overlap_ratio(pos_examples,targetLoc);
     pos_examples = pos_examples(r>0.6,:);
     pos_examples = pos_examples(randsample(end,min(opts.bbreg_nSamples,end)),:);
-    [img_crop, target_crop, bboxes, R] = im_roi_crop(img, targetLoc, pos_examples, opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
+    range = (0.3 + opts.scale_factor^ 10);
+    [img_crop, target_crop, bboxes, R] = im_roi_crop(img, targetLoc, pos_examples, opts.crop_mode, opts.crop_size, opts.crop_padding, 1, range, []);
     if numel(opts.gpus) > 0
        img_crop = gpuArray(img_crop);
     end
@@ -69,27 +70,39 @@ r = roi_overlap_ratio(pos_examples,targetLoc);
 pos_examples = pos_examples(r>opts.posThr_init,:);
 pos_examples = pos_examples(randsample(end,min(opts.nPos_init,end)),:);
 
-neg_examples = [roi_gen_samples('uniform', targetLoc, opts.nNeg_init, opts, 1, 10);...
-    roi_gen_samples('whole', targetLoc, opts.nNeg_init, opts)];
+neg_examples = [roi_gen_samples('uniform', targetLoc, opts.nNeg_init*2, opts, 1, 10);]...
+    %roi_gen_samples('whole', targetLoc, opts.nNeg_init, opts)];
+%neg_examples = [roi_gen_samples('uniform', targetLoc, opts.nNeg_init,opts, 1, 10);...
+%	roi_gen_samples('uniform', targetLoc, opts.nNeg_init, opts, 1, 10)];
 r = roi_overlap_ratio(neg_examples,targetLoc);
 neg_examples = neg_examples(r<opts.negThr_init,:);
 neg_examples = neg_examples(randsample(end,min(opts.nNeg_init,end)),:);
 
 
+neg_examples_update = roi_gen_samples('uniform', targetLoc, opts.nNeg_update*2, opts, 2, 5);
+r = roi_overlap_ratio(neg_examples_update,targetLoc);
+neg_examples_update = neg_examples_update(r<opts.negThr_init,:);
+neg_examples_update = neg_examples_update(randsample(end,min(opts.nNeg_update,end)),:);
 %% Learning CNN
+crop_trans_f = 2;
+crop_scale_f = 5;
+range = crop_trans_f + opts.scale_factor^crop_scale_f;
+%range = 50;
+[img_crop,target_crop, bboxes,R] = im_roi_crop(img, targetLoc, [pos_examples; neg_examples; neg_examples_update], opts.crop_mode, opts.crop_size, opts.crop_padding, 1, range , []);
 fprintf('  training cnn...\n');
-    if numel(opts.gpus) > 0
-       window = gpuArray(single(img));
-    end
+if numel(opts.gpus) > 0
+   window = gpuArray(single(img_crop));
+end
  
 net_conv.mode = 'test';
 net_conv.eval({'input', window});
 feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ; 
-
-net_fc = mdnet_roi_finetune_hnm(net_fc,net_conv, {feat}, {targetLoc}, {pos_examples},{neg_examples},...
+if opts.debug
+    plot_feature_conv(2, feat(:,:,1), 0.1, sprintf('Whole feature map of frame %d', 1), round(bboxes(1,:)/16)+1);
+end
+net_fc = mdnet_roi_finetune_hnm(net_fc, {feat}, {uint8(img_crop+128)}, {target_crop}, {bboxes(1:size(pos_examples, 1),:)}, {bboxes(1+size(pos_examples,1):size(pos_examples,1) + size(neg_examples),:)},...
     'maxiter',opts.maxiter_init,'learningRate',opts.learningRate_init, ...
-    'piecewise', opts.piecewise, 'derOutputs', opts.derOutputs, 'crop_mode', opts.crop_mode, ...
-'crop_size', opts.crop_size, 'crop_padding',opts.crop_padding, 'maxIn', opts.maxIn, 'minIn', opts.minIn, 'gpus', opts.gpus);
+    'piecewise', opts.piecewise, 'derOutputs', opts.derOutputs, 'gpus', opts.gpus, 'debug', opts.debug);
 ts = [ts, {toc(initts) - ts{end}}];
 %% Initialize displayots
 if display
@@ -115,15 +128,12 @@ total_roi_data = cell(1,nFrames);
 
 % total_pos_data_export = cell(1,1,1,nFrames);
 % total_neg_data_export = cell(1,1,1,nFrames);
-neg_examples = roi_gen_samples('uniform', targetLoc, opts.nNeg_update*2, opts, 2, 5);
-r = roi_overlap_ratio(neg_examples,targetLoc);
-neg_examples = neg_examples(r<opts.negThr_init,:);
-neg_examples = neg_examples(randsample(end,min(opts.nNeg_update,end)),:);
 
 total_img_data{1} = single(feat);
-total_roi_data{1} = single(targetLoc);
-total_pos_data{1} = single(pos_examples);
-total_neg_data{1} = single(neg_examples);
+total_roi_data{1} = single(target_crop);
+total_pos_data{1} = single(bboxes(1:size(pos_examples, 1),:));
+total_neg_data{1} = single(bboxes(1+size(pos_examples,1)+size(neg_examples,1):end, :));
+total_imgori_data{1} = single(img_crop);
 %total_pos_data_export{1} = feat_conv(:,:,:,pos_idx);
 %total_neg_data_export{1} = feat_conv(:,:,:,neg_idx);
 success_frames = 1;
@@ -148,11 +158,15 @@ for To = 2:nFrames;
     %% Estimation
     % draw target candidnegs
     samples = roi_gen_samples('gaussian', targetLoc, opts.nSamples, opts, trans_f, scale_f);
-
+    crop_trans_f = max(crop_trans_f, trans_f);
+    crop_scale_f = max(crop_scale_f, scale_f); 
+    range = (crop_trans_f + opts.scale_factor^crop_scale_f);
     % evaluate the candidates
-    [window,target_crop, bboxes,R] = im_roi_crop(img, targetLoc, samples, opts.crop_mode, opts.crop_size, opts.crop_padding, opts.minIn, opts.maxIn, []);
+    [window,target_crop, bboxes,R] = im_roi_crop(img, targetLoc, samples, opts.crop_mode, opts.crop_size, opts.crop_padding, 1, range , []);
     bboxes = single([ones(size(bboxes, 1), 1, 'single'), bboxes]');
-
+    if opts.debug
+        %plot_image(3, window, 0.1, round(bboxes(2:end, :))');
+    end
     bboxes_ori = bboxes;
     if numel(opts.gpus) > 0
         window = gpuArray(window) ;
@@ -161,14 +175,24 @@ for To = 2:nFrames;
     net_conv.eval({'input', window});
     
     feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ;
+    if opts.debug && mod(To, 5) == 1
+       plot_feature_conv(4, feat(:,:,1), 0.1, sprintf('Whole Feature map of frame %d', To), round(bboxes_ori(2:end,:)'/16)+1);
+    end
     if numel(opts.gpus) > 0
         feat = gpuArray(feat);
     end
 
     inputs = {'x10', feat, 'rois', bboxes} ;
     % backprop
+    net_fc.mode = 'test';
+    net_fc.reset();
     net_fc.eval(inputs);
-    probs = squeeze(gather(net_fc.vars(net_fc.getVarIndex('x17')).value)) ;
+    
+    features = squeeze(gather(net_fc.vars(net_fc.getVarIndex('xRP')).value)) ;
+    if opts.debug && mod(To, 5) == 1
+       plot_feature_conv(5, features(:,:,1,1:90), 1, sprintf('Bbox fmap of frame %d', To));
+    end
+    probs = squeeze(gather(net_fc.vars(net_fc.getVarIndex('probcls')).value)) ;
     cprobs = probs(2,:);
     if opts.piecewise
         pbbox = squeeze(gather(net_fc.vars(net_fc.getVarIndex('predbbox')).value)) ;
@@ -189,8 +213,6 @@ for To = 2:nFrames;
             targetLoc = [targetLoc./repmat([R(3:4), R(3:4)],size(targetLoc,1),1) + repmat([R(1:2),R(1:2)], size(targetLoc, 1),1) ];
         else
             thisLoc = [cls_dets(1, 1:end-1)./[R(3:4), R(3:4)] + [R(1:2),R(1:2)]];
-            %w = 1/(1+exp(target_score - cls_dets(1,end)));
-            %targetLoc = 2*[(1-w)* targetLoc; w*thisLoc];
             targetLoc = [thisLoc];
             target_score = cls_dets(1,end);
         end
@@ -219,32 +241,9 @@ for To = 2:nFrames;
             target_score = sprobs(ord(1));
         end
     end
-    fprintf('max probs: %.3f, target_score:%.3f\t', max(cprobs), target_score);
-
-    if opts.visualize
-     figure(2);
-     imshow(uint8(window));
-     hold on;
-     bbox = [target_crop;];
-     for i=1:size(bbox,1)
-        rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3) - bbox(i,1) + 1, bbox(i,4) - bbox(i,2) + 1]), 'EdgeColor', 'r');
-        hold on;
-     end
-      pause(0.1);
-     bbox = targetLoc;
-     for i=1:size(bbox,1)
-        rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3) - bbox(i,1) + 1, bbox(i,4) - bbox(i,2) + 1]), 'EdgeColor', 'y');
-        hold on;
-     end
-     pause(0.1);
-     %bbox = neg_examples(1:100,:);
-     bbox = bboxes_ori(2:end,:)';
-     for i=1:size(bbox,1)
-        rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3) - bbox(i,1) + 1, bbox(i,4) - bbox(i,2) + 1]), 'EdgeColor', 'b');
-        hold on;
-     end
-     hold off;
-     pause(0.1);
+    fprintf('max probs: %.3f, target_score:%.3f\n', max(cprobs), target_score);
+    if opts.debug
+        %plot_image(6, uint8(window), 1, [target_crop;], round(bboxes_ori(2:end,:)'/16)+1);
     end
     targetLoc = round(mean(targetLoc,1));
     targetLoc = max(1, targetLoc);
@@ -258,7 +257,7 @@ for To = 2:nFrames;
     end
     
     %% Prepare training data
-    if(target_score> 0)    
+    if(target_score > opts.scoreThr)    
         pos_examples = roi_gen_samples('gaussian', targetLoc, opts.nPos_update*2, opts, 0.1, 5);
         r = roi_overlap_ratio(pos_examples,targetLoc);
         pos_examples = pos_examples(r>opts.posThr_update,:);
@@ -270,17 +269,19 @@ for To = 2:nFrames;
         r = roi_overlap_ratio(neg_examples, targetLoc);
         neg_examples = neg_examples(r<opts.negThr_update,:);
         neg_examples = neg_examples(randsample(end,min(opts.nNeg_update,end)),:);
-        
+        range = (2 + opts.scale_factor^5);
+    	[img_crop, target_crop, bboxes, R] = im_roi_crop(img, targetLoc, [pos_examples; neg_examples], opts.crop_mode, opts.crop_size, opts.crop_padding, 1, range, []);
         if numel(opts.gpus) > 0
-           window = gpuArray(img) ;
+           window = gpuArray(img_crop) ;
         end
         net_conv.eval({'input', window});
         feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ;
-       
-        total_pos_data{To} = pos_examples;
-        total_neg_data{To} = neg_examples;
+   
+        total_pos_data{To} = bboxes(1:size(pos_examples,1),:);
+        total_neg_data{To} = bboxes(size(pos_examples,1)+1:end,:);
         total_img_data{To} = feat; 
-        total_roi_data{To} = single(targetLoc);
+        total_imgori_data{To} = uint8(img_crop+128); 
+        total_roi_data{To} = single(target_crop);
 
 %       total_pos_data_export{To} = total_pos_data{To};
 %       total_neg_data_export{To} = total_neg_data{To};
@@ -290,12 +291,14 @@ for To = 2:nFrames;
             total_img_data{success_frames(end-opts.nFrames_long)} = single([]);
             total_roi_data{success_frames(end-opts.nFrames_long)} = single([]);
             total_neg_data{success_frames(end-opts.nFrames_long)} = single([]);
+            total_imgroi_data{success_frames(end-opts.nFrames_long)} = single([]);
         end
     else
         total_pos_data{To} = single([]);
         total_neg_data{To} = single([]);
         total_img_data{To} = single([]);
         total_roi_data{To} = single([]);
+        total_imgori_data{To} = single([]);
 %       total_pos_data_export{To} = total_pos_data{To};
 %       total_neg_data_export{To} = total_neg_data{To};
     end
@@ -307,34 +310,38 @@ for To = 2:nFrames;
             img_data = total_img_data(success_frames(max(1,end-opts.nFrames_short+1):end));
             roi_data = total_roi_data(success_frames(max(1,end-opts.nFrames_short+1):end));
             neg_data = total_neg_data(success_frames(max(1,end-opts.nFrames_short+1):end));
+            imgori_data = total_imgori_data(success_frames(max(1,end-opts.nFrames_short+1):end));
         else % long-term update
             pos_data = total_pos_data(success_frames(max(1,end-opts.nFrames_long+1):end));
             img_data = total_img_data(success_frames(max(1,end-opts.nFrames_long+1):end));
             roi_data = total_roi_data(success_frames(max(1,end-opts.nFrames_long+1):end));
             neg_data = total_neg_data(success_frames(max(1,end-opts.nFrames_long+1):end));
+            imgori_data = total_imgori_data(success_frames(max(1,end-opts.nFrames_long+1):end));
         end
         
 %         fprintf('\n');
-        
+        crop_trans_f = 2;
+        crop_scale_f = 5; 
         sus = success_frames(max(1,end-numel(pos_data)+1):end);
         % generate batch
         img_update = cell(floor(numel(img_data)/opts.batchimg) + 1, 1);
+        imgori_update = cell(floor(numel(imgori_data)/opts.batchimg) + 1, 1);
         pos_update = cell(floor(numel(img_data)/opts.batchimg) + 1, 1);
         neg_update = cell(floor(numel(img_data)/opts.batchimg) + 1, 1);
         roi_update = cell(floor(numel(img_data)/opts.batchimg) + 1, 1);
         for j = 1:numel(img_data)
             offset = floor( (j-1)/opts.batchimg ) + 1;
             img_update{offset}{mod(j-1, opts.batchimg) + 1} = img_data{j};
+            imgori_update{offset}{mod(j-1, opts.batchimg) + 1} = imgori_data{j};
             pos_update{offset}{mod(j-1, opts.batchimg) + 1} = pos_data{j};
             neg_update{offset}{mod(j-1, opts.batchimg) + 1} = neg_data{j};
             roi_update{offset}{mod(j-1, opts.batchimg) + 1} = roi_data{j};
         end
         for j = 1:numel(img_update)
-       	    net_fc = mdnet_roi_finetune_hnm(net_fc,net_conv, img_update{j},roi_update{j}, pos_update{j},neg_update{j},...
+       	    net_fc = mdnet_roi_finetune_hnm(net_fc, img_update{j},imgori_update{j},roi_update{j}, pos_update{j},neg_update{j},...
                                         'maxiter',opts.maxiter_update,'learningRate',opts.learningRate_update, ...
-					'piecewise', opts.piecewise, 'derOutputs', opts.derOutputs, 'crop_mode', opts.crop_mode, ...
-					'crop_size', opts.crop_size, 'crop_padding',opts.crop_padding, ...
-					'maxIn', opts.maxIn, 'minIn', opts.minIn, 'gpus', opts.gpus);
+					'piecewise', opts.piecewise, 'derOutputs', opts.derOutputs,  ...
+					'gpus', opts.gpus, 'debug', opts.debug);
         end
     end
     
@@ -367,6 +374,9 @@ for To = 2:nFrames;
             fname = sprintf('fast_mdnet_%d.png', To);
             saveas(gcf, fname);
         end
+        end
+        if opts.debug
+           pause(1);
         end
         drawnow;
     end

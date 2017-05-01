@@ -1,4 +1,4 @@
-function [net] = mdnet_roi_finetune_hnm(net, net_conv, img, targetLoc, pos_data, neg_data, varargin)
+function [net] = mdnet_roi_finetune_hnm(net, img, img_ori, targetLoc, pos_data, neg_data, varargin)
 % MDNET_FINETUNE_HNM   
 % Train a CNN by SGD, with hard minibatch mining.
 %
@@ -23,12 +23,8 @@ opts.batchSize = 128;
 opts.batch_pos = 32;
 opts.batch_neg = 96;
 opts.derOutputs = {'losscls', 1} ;
-opts.visualize = false;
-opts.crop_mode = 'warp';
-opts.crop_size = 107;
-opts.crop_padding = 16;
-opts.maxIn = 400;
-opts.minIn = 200;
+opts.debug = false;
+
 [opts, args] = vl_argparse(opts, varargin) ;
 % -------------------------------------------------------------------------
 %                                                    Network initialization
@@ -128,6 +124,7 @@ for t=1:opts.maxiter
     score_hneg = zeros(opts.batchSize_hnm*opts.batchAcc_hnm,1);
     hneg_start = opts.batchSize_hnm*opts.batchAcc_hnm*(t-1);
     for h=1:opts.batchAcc_hnm
+        hnm_s = tic;
         batch = new_neg_data(train_neg(hneg_start+(h-1)*opts.batchSize_hnm+1:hneg_start+h*opts.batchSize_hnm), :);
         neg_batch = [];
         target_batch = [];
@@ -146,14 +143,8 @@ for t=1:opts.maxiter
         for i = 1:numel(img_tmp) 
              img_batch(1:size(img_tmp{i}, 1), 1:size(img_tmp{i},2), :, i) = single(img_tmp{i});
         end
-        if numel(opts.gpus) > 0
-           img_batch = gpuArray(img_batch);
-        end
-        
-        new_box = [round(target_batch(1:2)/16) - 1, round(target_batch(3:4)/16) - 1];
-        new_ex_box = [round(neg_batch(:,2:3)/16) - 1, round(neg_batch(:,4:5)/16) - 1];
-        target_feat = img_batch(new_box(1):new_box(3), new_box(2):new_box(4),:);
         rois = single(neg_batch)';        
+        fprintf('dirty_ops %.2f\n',toc(hnm_s));
         % Evaluate network either on CPU or GPU.
         if numel(opts.gpus) > 0
 	    feat = gpuArray(img_batch);
@@ -165,7 +156,7 @@ for t=1:opts.maxiter
         % backprop
         net.eval(inputs);
         % Extract class probabilities and  bounding box refinements
-        probs = squeeze(gather(net.vars(net.getVarIndex('x17')).value)) ;
+        probs = squeeze(gather(net.vars(net.getVarIndex('probcls')).value)) ;
         probs = probs(2,:);
         net.reset();
         score_hneg((h-1)*opts.batchSize_hnm+1:h*opts.batchSize_hnm) = probs;
@@ -174,47 +165,14 @@ for t=1:opts.maxiter
     %fprintf('max score: %.3f, min score: %.3f', score_hneg(ord(1)), score_hneg(ord(end)) );
     hnegs = train_neg(hneg_start+ord(1:opts.batch_neg));
     im_hneg = new_neg_data(hnegs, :);
-   
- 
+    hntime = toc(iter_time);
 %     fprintf('hnm: %d/%d, ', opts.batch_neg, opts.batchSize_hnm*opts.batchAcc_hnm) ;
    % ----------------------------------------------------------------------
     % get next image batch and labels
     % ----------------------------------------------------------------------
     pos = new_pos_data(train_pos((t-1)*opts.batch_pos+1:t*opts.batch_pos), :);
-    if opts.visualize
-         figure(2);
-         imshow(uint8(img{1})+128);
-         hold on;
-         bbox = [targetLoc{1}(1:2), targetLoc{1}(3:4) - targetLoc{1}(1:2) + 1;];
-         for i=1:size(bbox,1)
-            rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3), bbox(i,4)]), 'EdgeColor', 'r');
-            hold on;
-         end
-         %bbox = neg_examples(1:100,:);
-         bbox = pos(find(pos(:,1) == 1), 2:end);
-         bbox = [ bbox(:, 1:2), bbox(:,3:4) - bbox(:,1:2) + 1];
-         for i=1:size(bbox,1)
-            rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3), bbox(i,4)]), 'EdgeColor', 'y');
-            hold on;
-         end
-
-         bbox = im_hneg(find(im_hneg(1:10,1) == 1), 2:end);
-         %bbox = new_neg_data(train_neg(hneg_start+1:hneg_start+opts.batchAcc_hnm*opts.batchSize_hnm), :);
-         %bbox = bbox(find(bbox(:,1) == 1), 2:end);
-         r = roi_overlap_ratio(bbox, targetLoc{1});
-         bbox = bbox(r>0,:);
-         bbox = [ bbox(:, 1:2), bbox(:,3:4) - bbox(:,1:2) + 1];
-         for i=1:size(bbox,1)
-            rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3), bbox(i,4)]), 'EdgeColor', 'b');
-            hold on;
-         end
-         hold off;
-         pause(0.1);
-    end
- 
     batch = cat(1,pos,im_hneg);
     bbox_batch = [];
-    R_batch = [];
     target_batch = [];
     label_batch =[];
     maxH = 0;
@@ -228,45 +186,16 @@ for t=1:opts.maxiter
          maxW = max(maxW, size(img{l}, 2));
          bbox_batch = cat(1,bbox_batch, batch(matched, :));
          target_batch = cat(1,target_batch, targetLoc{l});
-    if opts.visualize
-         figure(3);
-         imshow(uint8(img_tmp{l})+128);
-         hold on;
-         if numel(img) == 1
-         	bbox = [target_batch(1:2), target_batch(3:4) - target_batch(1:2) + 1;];
-         else
-         	bbox = [target_batch(l, 1:2), target_batch(l, 3:4) - target_batch(l, 1:2) + 1;];
+         pos = batch(matched(matched <= opts.batch_pos), 2:end);
+         neg = batch(matched(matched > opts.batch_pos), 2:end);
+         if opts.debug && t == opts.maxiter
+             %plot_image(7, img_ori{l}, 0.1, pos, neg);
          end
-         for i=1:size(bbox,1)
-            rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3), bbox(i,4)]), 'EdgeColor', 'r');
-            hold on;
-         end
-         %bbox = neg_examples(1:100,:);
-         bbox = bbox_batch(find((bbox_batch(:,1) == l) .* (label_batch == 2)), 2:end);
-         bbox = [ bbox(:, 1:2), bbox(:,3:4) - bbox(:,1:2) + 1];
-         for i=1:size(bbox,1)
-            rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3), bbox(i,4)]), 'EdgeColor', 'y');
-            hold on;
-         end
-
-         bbox = bbox_batch(find((bbox_batch(:,1) == l) .* (label_batch == 1)), 2:end);
-         bbox = [ bbox(:, 1:2), bbox(:,3:4) - bbox(:,1:2) + 1];
-         for i=1:size(bbox,1)
-            rectangle('Position',round([bbox(i,1),bbox(i,2), bbox(i,3), bbox(i,4)]), 'EdgeColor', 'b');
-            hold on;
-         end
-         hold off;
-         pause(0.1);
-    end
- 
      end
      img_batch = zeros(maxH, maxW,size(img{1},3), numel(img), 'single');
      for i = 1:numel(img_tmp) 
          img_batch(1:size(img_tmp{i}, 1), 1:size(img_tmp{i},2), :, i) = single(img_tmp{i});
      end
-
-        new_box = [round(target_batch(1:2)/16) - 1, round(target_batch(3:4)/16) - 1];
-        new_ex_box = [round(bbox_batch(:,2:3)/16) - 1, round(bbox_batch(:,4:5)/16) - 1];
 
     if opts.piecewise
        pos_in_batch = find(label_batch == 2);
@@ -316,8 +245,11 @@ for t=1:opts.maxiter
    
     % print information
     loss = squeeze(gather(net.vars(net.getVarIndex('losscls')).value)) ;
-    probs = squeeze(gather(net.vars(net.getVarIndex('x17')).value)) ;
-
+    probs = squeeze(gather(net.vars(net.getVarIndex('probcls')).value)) ;
+    if opts.debug && t == opts.maxiter
+        features = squeeze(gather(net.vars(net.getVarIndex('xRP')).value)) ;
+        plot_feature_conv(8, features(:,:,1,:), 0.1, 'Training: bbox fmap');
+    end
     loss_cls(t) = gather(loss)/opts.batchSize ;
     if opts.piecewise
     	lossb = squeeze(gather(net.vars(net.getVarIndex('lossbbox')).value)) ;
@@ -326,7 +258,7 @@ for t=1:opts.maxiter
     	loss_bbox(t) = gather(lossb)/opts.batchSize ;
     end
     iter_time = toc(iter_time);
-    fprintf('iter: %d, cls_loss %.3f, bbox_loss: %.6f, time %.2f s\n', t, loss_cls(t), loss_bbox(t), iter_time) ;
+    fprintf('iter: %d, cls_loss %.3f, bbox_loss: %.6f, time %.2f, hntime %.2f s\n', t, loss_cls(t), loss_bbox(t), iter_time, hntime) ;
     net.reset();
     
 end % next batch

@@ -37,8 +37,8 @@ opts.sampling.val_ratio         = 0.95;
 opts.train.batchSize        = 8 ;
 
 opts.train.numEpochs        = 20 ; % #cycles (#iterations/#domains)
-opts.train.learningRate     = 0.001*[0.001*ones(9,1);0.0001*ones(6,1)] ; % x10 for fc4-6
-opts.train.gpus = [2,3] ;
+opts.train.learningRate     = 0.001*[0.001*ones(5,1);0.0001*ones(10,1)] ; % x10 for fc4-6
+opts.train.gpus = [2,3,4,6] ;
 %opts.train.gpus = [] ;
 opts.train.numSubBatches = 1 ;
 opts.train.prefetch = false ; % does not help for two images in a batch
@@ -68,17 +68,17 @@ opts.train.derOutputs = {'losscls', 1} ;
 end
 %% Initializing MDNet
 K = numel(imdb.images.name);
-net = mdnet_roi_init_train(opts, K);
-%net = load(opts.netFile);
-%net = net.net;
-%net = dagnn.DagNN.loadobj(net);
+%net = mdnet_roi_init_train(opts, K);
+net = load(opts.netFile);
+net = net.net;
+net = dagnn.DagNN.loadobj(net);
 
 %% Training MDNet
 % minibatch options
 bopts.gpus             = opts.train.gpus;
 bopts.batch_pos        = 32*4;
 bopts.batch_neg        = 96*4;
-bopts.crop_size        = 400;
+bopts.crop_size        = 800;
 bopts.crop_padding     = opts.sampling.crop_padding;
 bopts.crop_mode     = opts.sampling.crop_mode;
 bopts.bgLabel = 1;
@@ -91,9 +91,9 @@ bopts.scale_factor = opts.sampling.scale_factor;
 bopts.scale_range  = 10;
 bopts.trans_range  = 2;
 
-[net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
-                           getBatch(bopts,i,k,b), ...
-                           opts.train) ;
+%[net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
+%                           getBatch(bopts,i,k,b), ...
+%                           opts.train) ;
 
 % --------------------------------------------------------------------
 %                                                               Deploy

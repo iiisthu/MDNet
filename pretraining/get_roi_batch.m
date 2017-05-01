@@ -105,7 +105,7 @@ minLh = round(max(1,  center(2) - center(4)*crop_range));
 maxRw = round(min(center(1) + center(3)*crop_range, size(ims{1}, 2)));
 maxRh = round(min(center(2) + center(4)*crop_range, size(ims{1}, 1)));
 ratio = (maxRw - minLw + 1)/(maxRh - minLh + 1);
-aspect_ratio = [0.5, 1, 2];
+aspect_ratio = [1];
 [~, as] = min(abs(ratio - aspect_ratio));
 as_chosen = aspect_ratio(as);
 %fprintf('actual ratio: %.2f, chosen ratio: %.2f', ratio, as_chosen);
