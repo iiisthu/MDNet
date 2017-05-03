@@ -14,11 +14,11 @@ function [ config ] = genConfig(dataset,seqName)
 
 config.dataset = dataset;
 config.seqName = seqName;
-
+dataset_path = '/disks/hdd1/shenh10/data';
 switch(dataset)
     case {'otb'}
         % path to OTB dataset
-        benchmarkSeqHome ='/disks/hdd1/shenh10/data/otb100/';
+        benchmarkSeqHome = fullfile(dataset_path, 'otb100');
         
         % img path
         switch(config.seqName)
@@ -78,7 +78,7 @@ switch(dataset)
         
     case {'vot2013','vot2014','vot2015'}
         % path to VOT dataset
-        benchmarkSeqHome = ['/home/zhipengjia/', dataset]; % ['./dataset/VOT/', dataset(end-3:end)];
+        benchmarkSeqHome = fullfile( dataset_path, dataset ); % ['./dataset/VOT/', dataset(end-3:end)];
         
         % img path
         config.imgDir = fullfile(benchmarkSeqHome, config.seqName);

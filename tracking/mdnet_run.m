@@ -37,13 +37,17 @@ if(opts.bbreg)
     r = overlap_ratio(pos_examples,targetLoc);
     pos_examples = pos_examples(r>0.6,:);
     pos_examples = pos_examples(randsample(end,min(opts.bbreg_nSamples,end)),:);
+    %plot_image(3, img, 0.1, [pos_examples(:,1:2), pos_examples(:,3:4)+pos_examples(:,1:2)-1]);
     feat_conv = mdnet_features_convX(net_conv, img, pos_examples, opts);
     
+    %plot_feature_conv(2, feat_conv(:,:,1,:), 0.1, sprintf('Pos feature map of frame %d', 1));
     X = permute(gather(feat_conv),[4,3,1,2]);
     X = X(:,:);
     bbox = pos_examples;
     bbox_gt = repmat(targetLoc,size(pos_examples,1),1);
     bbox_reg = train_bbox_regressor(X, bbox, bbox_gt);
+    %bbox_rec = predict_bbox_regressor(bbox_reg.model, X, bbox);
+
 end
 ts = [ts, {toc(initts) - acc}];
 acc = acc + ts{end};
@@ -56,9 +60,10 @@ r = overlap_ratio(pos_examples,targetLoc);
 pos_examples = pos_examples(r>opts.posThr_init,:);
 pos_examples = pos_examples(randsample(end,min(opts.nPos_init,end)),:);
 
-neg_examples = [gen_samples('uniform', targetLoc, opts.nNeg_init, opts, 1, 10);...
-    gen_samples('whole', targetLoc, opts.nNeg_init, opts)];
-r = overlap_ratio(neg_examples,targetLoc);
+%neg_examples = [gen_samples('uniform', targetLoc, opts.nNeg_init, opts, 1, 10);...
+%    gen_samples('whole', targetLoc, opts.nNeg_init, opts)];
+neg_examples = [gen_samples('uniform', targetLoc, opts.nNeg_init*2, opts, 1, 10)];
+    r = overlap_ratio(neg_examples,targetLoc);
 neg_examples = neg_examples(r<opts.negThr_init,:);
 neg_examples = neg_examples(randsample(end,min(opts.nNeg_init,end)),:);
 
@@ -69,6 +74,7 @@ ts = [ts, {toc(initts) - acc}];
 acc = acc + ts{end};
 % extract conv3 features
 feat_conv = mdnet_features_convX(net_conv, img, examples, opts);
+
 pos_data = feat_conv(:,:,:,pos_idx);
 neg_data = feat_conv(:,:,:,neg_idx);
 ts = [ts, {toc(initts) - acc}];
@@ -113,6 +119,7 @@ pos_idx = 1:size(pos_examples,1);
 neg_idx = (1:size(neg_examples,1)) + size(pos_examples,1);
 
 feat_conv = mdnet_features_convX(net_conv, img, examples, opts);
+%plot_feature_conv(3, cat(4, feat_conv(:,:,1,1:50), feat_conv(:,:,1,501:end)), 0.1, sprintf('Whole feature map of frame %d', 1));
 total_pos_data{1} = feat_conv(:,:,:,pos_idx);
 total_neg_data{1} = feat_conv(:,:,:,neg_idx);
 %total_pos_data_export{1} = feat_conv(:,:,:,pos_idx);
@@ -162,6 +169,9 @@ for To = 2:nFrames;
     % bbox regression
     if(opts.bbreg && target_score>0)
         X_ = permute(gather(feat_conv(:,:,:,idx(1:5))),[4,3,1,2]);
+        %plot_feat = feat_conv(:,:,1:20,idx(1:5));
+        %plot_feat = plot_feat(:,:,:);
+        %plot_feature_conv(3, plot_feat, 0.1, sprintf('Pos feature map of frame %d', 1));
         X_ = X_(:,:);
         bbox_ = samples(idx(1:5),:);
         pred_boxes = predict_bbox_regressor(bbox_reg.model, X_, bbox_);

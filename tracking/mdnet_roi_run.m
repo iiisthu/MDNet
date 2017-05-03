@@ -29,36 +29,7 @@ result = zeros(nFrames, 4); result(1,:) = region;
 [net_conv, net_fc, opts] = mdnet_roi_init(img, net);
 ts = [ts, {toc(initts)}];
 if(opts.bbreg)
-    pos_examples = roi_gen_samples('uniform_aspect', targetLoc, opts.bbreg_nSamples*10, opts, 0.3, 10);
-    r = roi_overlap_ratio(pos_examples,targetLoc);
-    pos_examples = pos_examples(r>0.6,:);
-    pos_examples = pos_examples(randsample(end,min(opts.bbreg_nSamples,end)),:);
-    range = (0.3 + opts.scale_factor^ 10);
-    [img_crop, target_crop, bboxes, R] = im_roi_crop(img, targetLoc, pos_examples, opts.crop_mode, opts.crop_size, opts.crop_padding, 1, range, []);
-    if numel(opts.gpus) > 0
-       img_crop = gpuArray(img_crop);
-    end
-    net_conv.mode = 'test';
-    net_conv.eval({'input', img_crop});
-    feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ; 
-    rois = [ones(size(bboxes,1),1),  bboxes]' ;        
-    rois = single(rois);
-    % Evaluate network either on CPU or GPU.
-    if numel(opts.gpus) > 0
-       feat = gpuArray(feat);
-       rois = gpuArray(rois) ;
-    end
-    net_fc.mode = 'test' ;
-    net_fc.conserveMemory = false ;
-    inputs = {'x10', feat, 'rois', rois} ;
-    % backprop
-    net_fc.eval(inputs);
-    feat = squeeze(gather(net_fc.vars(net_fc.getVarIndex('xRP')).value)) ; 
-    X = permute(gather(feat),[4,3,1,2]);
-    X = X(:,:);
-    bbox = pos_examples;
-    bbox_gt = repmat(targetLoc,size(pos_examples,1),1);
-    bbox_reg = train_bbox_regressor(X, bbox, bbox_gt);
+bbox_reg =  mdnet_roi_train_bbreg(net_conv, net_fc, img, targetLoc, opts);
 end
 
 %% Extract training examples
@@ -70,7 +41,7 @@ r = roi_overlap_ratio(pos_examples,targetLoc);
 pos_examples = pos_examples(r>opts.posThr_init,:);
 pos_examples = pos_examples(randsample(end,min(opts.nPos_init,end)),:);
 
-neg_examples = [roi_gen_samples('uniform', targetLoc, opts.nNeg_init*2, opts, 1, 10);]...
+neg_examples = [roi_gen_samples('uniform', targetLoc, opts.nNeg_init*2, opts, 1, 10);];
     %roi_gen_samples('whole', targetLoc, opts.nNeg_init, opts)];
 %neg_examples = [roi_gen_samples('uniform', targetLoc, opts.nNeg_init,opts, 1, 10);...
 %	roi_gen_samples('uniform', targetLoc, opts.nNeg_init, opts, 1, 10)];
@@ -103,6 +74,26 @@ end
 net_fc = mdnet_roi_finetune_hnm(net_fc, {feat}, {uint8(img_crop+128)}, {target_crop}, {bboxes(1:size(pos_examples, 1),:)}, {bboxes(1+size(pos_examples,1):size(pos_examples,1) + size(neg_examples),:)},...
     'maxiter',opts.maxiter_init,'learningRate',opts.learningRate_init, ...
     'piecewise', opts.piecewise, 'derOutputs', opts.derOutputs, 'gpus', opts.gpus, 'debug', opts.debug);
+
+%if opts.piecewise
+%opts.derOutputs = {'losscls', 1, 'lossbbox', 1};
+%else
+%opts.derOutputs = {'losscls', 1};
+%end
+%
+%pFc6 = find(arrayfun(@(a) strcmp(a.name, 'predclsf'), net_fc.params)==1);
+%start = pFc6+2;
+%for i=start:start + 1
+%  if mod(i-start , 2) == 0
+%     net_fc.params(i).weightDecay = 1;
+%     net_fc.params(i).learningRate = 1;
+%  else
+%     net_fc.params(i).weightDecay = 0;
+%     net_fc.params(i).learningRate = 2;
+%  end
+%
+%end
+
 ts = [ts, {toc(initts) - ts{end}}];
 %% Initialize displayots
 if display
@@ -208,8 +199,8 @@ for To = 2:nFrames;
         sel_boxes = find(cls_dets(:,end) >= opts.confThreshold) ;
         if ~isempty(sel_boxes)
         % final target 
-            targetLoc = [cls_dets(sel_boxes(1:min(5,end)),1:4);];
-            target_score = mean(cls_dets(sel_boxes(1:min(5,end)),end));
+            targetLoc = [cls_dets(sel_boxes(1:min(3,end)),1:4);];
+            target_score = mean(cls_dets(sel_boxes(1:min(3,end)),end));
             targetLoc = [targetLoc./repmat([R(3:4), R(3:4)],size(targetLoc,1),1) + repmat([R(1:2),R(1:2)], size(targetLoc, 1),1) ];
         else
             thisLoc = [cls_dets(1, 1:end-1)./[R(3:4), R(3:4)] + [R(1:2),R(1:2)]];
@@ -220,15 +211,21 @@ for To = 2:nFrames;
         [sprobs ,ord]  = sort(cprobs, 'descend');
         sel_boxes = find(sprobs >= opts.confThreshold);
         if ~isempty(sel_boxes)
-            targetLoc = bboxes_ori(2:end, ord(sel_boxes(1:min(3,end))))';
-            target_score = mean(sprobs(sel_boxes(1:min(3,end))));
+            targetLoc = bboxes_ori(2:end, ord(sel_boxes(1:min(5,end))))';
+            target_score = mean(sprobs(sel_boxes(1:min(5,end))));
             % bbox regression
             if(opts.bbreg && target_score>opts.scoreThr)
                feat_rois = squeeze(gather(net_fc.vars(net_fc.getVarIndex('xRP')).value)) ;
+	       %plot_feat = feat_rois(:,:,1:20,ord(sel_boxes(1:min(5,end))));
+               %plot_feat = plot_feat(:,:,:);
+       	       %plot_feature_conv(5, plot_feat, 1, sprintf('Bbox fmap of frame %d', To));
                X_ = permute(gather(feat_rois(:,:,:,ord(sel_boxes(1:min(5,end))))),[4,3,1,2]);
                X_ = X_(:,:);
                bbox_ = bboxes_ori(2:end,ord(sel_boxes(1:min(5,end))))';
+               % convert to [x1,y1,w,h]
+               bbox_ = [bbox_(:,1:2), bbox_(:,3:4) - bbox_(:,1:2) + 1];
                targetLoc = predict_bbox_regressor(bbox_reg.model, X_, bbox_);
+               targetLoc = [targetLoc(:,1:2), targetLoc(:,1:2) + targetLoc(:,3:4) - 1];
             end
 
             targetLoc = [targetLoc./repmat([R(3:4), R(3:4)],size(targetLoc,1),1) + repmat([R(1:2),R(1:2)], size(targetLoc, 1),1) ];
@@ -247,6 +244,12 @@ for To = 2:nFrames;
     end
     targetLoc = round(mean(targetLoc,1));
     targetLoc = max(1, targetLoc);
+    [h,w, ~] = size(img);
+    targetLoc = [targetLoc(1:2), targetLoc(3:4)-targetLoc(1:2) + 1];
+    targetLoc(1) = max(1,min(w- targetLoc(3)/2, targetLoc(1)));
+    targetLoc(2) = max(1,min(h- targetLoc(4)/2, targetLoc(2)));
+    targetLoc(3) = min(w, targetLoc(1) + targetLoc(3) - 1); 
+    targetLoc(4) = min(h, targetLoc(2) + targetLoc(4) - 1); 
     result(To,:) = [targetLoc(1:2), targetLoc(3:4) - targetLoc(1:2) + 1];
     % extend search space in case of failure
     if(target_score <= opts.scoreThr)
@@ -375,9 +378,9 @@ for To = 2:nFrames;
             saveas(gcf, fname);
         end
         end
-        if opts.debug
-           pause(1);
-        end
+%        if opts.debug
+           pause(0.1);
+%        end
         drawnow;
     end
 end

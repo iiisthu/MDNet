@@ -13,13 +13,15 @@ addpath('pretraining');
 addpath('tracking');
 addpath('utils');
 addpath('pretraining/bbox_functions');
-conf = genConfig('otb','Soccer');
-% conf = genConfig('vot2015','ball1');
+conf = genConfig('otb','Diving');
+% conf = genConfig('Dancer','ball1');
 
 switch(conf.dataset)
     case 'otb'
         %net = fullfile('models','net-deployed_shared_bbox_relu_sub7_fixed_test-epoch11.mat');
-        net = fullfile('models','net-deployed_sub3_oneas_large_epoch4.mat');
+        %net = fullfile('models','net-deployed_sub3_oneas_large.mat');
+        net = fullfile('models','net-deployed_vot-otb_sub3_oneas_large_nopw_epoch4.mat');
+
     case 'vot2014'
         net = fullfile('models','mdnet_roi_otb-vot14.mat');
     case 'vot2015'

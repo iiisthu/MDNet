@@ -103,13 +103,13 @@ samples = [samples(:,1)-samples(:,3)/2 samples(:,2)-samples(:,4)/2 samples(:,3:4
 if(valid)
     samples(:,1) = max(1,min(w-samples(:,3), samples(:,1)));
     samples(:,2) = max(1,min(h-samples(:,4), samples(:,2)));
-    samples(:,3) = min(w - samples(:,1), samples(:,3)) ;
-    samples(:,4) = min(h - samples(:,2), samples(:,4)) ;
+    %samples(:,3) = min(w - samples(:,1), samples(:,3)) ;
+    %samples(:,4) = min(h - samples(:,2), samples(:,4)) ;
 else
     samples(:,1) = max(1-samples(:,3)/2,min(w-samples(:,3)/2, samples(:,1)));
     samples(:,2) = max(1-samples(:,4)/2,min(h-samples(:,4)/2, samples(:,2)));
-    samples(:,3) = min(w - samples(:,1), samples(:,3)) ;
-    samples(:,4) = min(h - samples(:,2), samples(:,4)) ;
+    %samples(:,3) = min(w - samples(:,1), samples(:,3)) ;
+    %samples(:,4) = min(h - samples(:,2), samples(:,4)) ;
 end
 samples = round(samples);
 

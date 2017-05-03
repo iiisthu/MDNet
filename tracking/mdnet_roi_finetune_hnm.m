@@ -111,7 +111,10 @@ end
 % objective fuction
 loss_cls = zeros(1,opts.maxiter);
 loss_bbox = zeros(1,opts.maxiter);
-
+img_batch = zeros(size(img{1},1), size(img{1}, 2), size(img{1}, 3), numel(img), 'single');
+for i = 1:numel(img)
+   img_batch(:,:,:,i) = single(img{i});
+end
 %% training on training set
 % fprintf('\n');
 for t=1:opts.maxiter
@@ -128,23 +131,14 @@ for t=1:opts.maxiter
         batch = new_neg_data(train_neg(hneg_start+(h-1)*opts.batchSize_hnm+1:hneg_start+h*opts.batchSize_hnm), :);
         neg_batch = [];
         target_batch = [];
-        maxH = 0;
-        maxW = 0;
         img_tmp = {};
         for i = 1:numel(img)
              matched_neg = find( batch(:,1) == i );
-             img_tmp{i} = img{i};
-             maxH = max(maxH, size(img_tmp{i}, 1));
-             maxW = max(maxW, size(img_tmp{i}, 2));
-             neg_batch = cat(1,neg_batch, batch(matched_neg, :));
+	     neg_batch = cat(1,neg_batch, batch(matched_neg, :));
              target_batch = cat(1,target_batch, targetLoc{i});
         end
-	img_batch = zeros(maxH, maxW, size(img{1},3), numel(img), 'single');
-        for i = 1:numel(img_tmp) 
-             img_batch(1:size(img_tmp{i}, 1), 1:size(img_tmp{i},2), :, i) = single(img_tmp{i});
-        end
         rois = single(neg_batch)';        
-        fprintf('dirty_ops %.2f\n',toc(hnm_s));
+    %    fprintf('dirty_ops %.2f\n',toc(hnm_s));
         % Evaluate network either on CPU or GPU.
         if numel(opts.gpus) > 0
 	    feat = gpuArray(img_batch);
@@ -175,28 +169,17 @@ for t=1:opts.maxiter
     bbox_batch = [];
     target_batch = [];
     label_batch =[];
-    maxH = 0;
-    maxW = 0;
-    img_tmp = {};
     for l = 1:numel(img)
          matched = find( batch(:,1) == l );
-         img_tmp{l} = img{l};
          label_batch = [label_batch; 2*ones(numel(find(matched <= opts.batch_pos)), 1, 'single'); ones(numel(find(matched > opts.batch_pos)), 1, 'single')];
-         maxH = max(maxH, size(img{l}, 1));
-         maxW = max(maxW, size(img{l}, 2));
          bbox_batch = cat(1,bbox_batch, batch(matched, :));
          target_batch = cat(1,target_batch, targetLoc{l});
-         pos = batch(matched(matched <= opts.batch_pos), 2:end);
-         neg = batch(matched(matched > opts.batch_pos), 2:end);
          if opts.debug && t == opts.maxiter
+             pos = batch(matched(matched <= opts.batch_pos), 2:end);
+             neg = batch(matched(matched > opts.batch_pos), 2:end);
              %plot_image(7, img_ori{l}, 0.1, pos, neg);
          end
      end
-     img_batch = zeros(maxH, maxW,size(img{1},3), numel(img), 'single');
-     for i = 1:numel(img_tmp) 
-         img_batch(1:size(img_tmp{i}, 1), 1:size(img_tmp{i},2), :, i) = single(img_tmp{i});
-     end
-
     if opts.piecewise
        pos_in_batch = find(label_batch == 2);
        btargets = zeros(size(pos_in_batch,1), 4, 'single');
@@ -246,9 +229,9 @@ for t=1:opts.maxiter
     % print information
     loss = squeeze(gather(net.vars(net.getVarIndex('losscls')).value)) ;
     probs = squeeze(gather(net.vars(net.getVarIndex('probcls')).value)) ;
-    if opts.debug && t == opts.maxiter
+    if opts.debug && ( t == 1 || t == opts.maxiter)
         features = squeeze(gather(net.vars(net.getVarIndex('xRP')).value)) ;
-        plot_feature_conv(8, features(:,:,1,:), 0.1, 'Training: bbox fmap');
+        plot_feature_conv(8, features(:,:,2,:), 0.1, 'Training: bbox fmap');
     end
     loss_cls(t) = gather(loss)/opts.batchSize ;
     if opts.piecewise

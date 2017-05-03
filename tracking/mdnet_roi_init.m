@@ -46,7 +46,7 @@ opts.negThr_update = 0.3;
 opts.update_interval = 10; % interval for long-term update
 
 % data gathering policy
-opts.nFrames_long = 50; % long-term period
+opts.nFrames_long = 100; % long-term period
 opts.nFrames_short = 20; % short-term period
 
 % cropping policy
@@ -54,11 +54,11 @@ opts.crop_size = 800;
 opts.crop_mode = 'wrap';
 opts.crop_padding = 0;
 opts.nmsThreshold = 0 ;
-opts.confThreshold = 0 ;
+opts.confThreshold = 0.5 ;
 opts.debug = false;
 % scaling policy
 opts.scale_factor = 1.05;
-opts.piecewise = 1;
+opts.piecewise = 0;
 if opts.piecewise
 opts.derOutputs = {'losscls', 1, 'lossbbox', 1};
 else
@@ -96,14 +96,26 @@ for i = 1:pFc6 - 1
   end
 
 end
-for i=pFc6:numel(net.params) 
-  if mod(i-pFc6, 2) == 0
+start =  pFc6;
+for i=start:start + 1
+  if mod(i-start, 2) == 0
      net.params(i).weightDecay = 1;
      net.params(i).learningRate = 20;
   else
      net.params(i).weightDecay = 0;
      net.params(i).learningRate = 40;
   end
+end
+start = pFc6+2;
+for i=start:start + 1
+  if mod(i-start , 2) == 0
+     net.params(i).weightDecay = 1;
+     net.params(i).learningRate = 40;
+  else
+     net.params(i).weightDecay = 0;
+     net.params(i).learningRate = 80;
+  end
+
 end
 
 lrelu3 = find(arrayfun(@(a) strcmp(a.name, 'relu3'), net.layers)==1);
