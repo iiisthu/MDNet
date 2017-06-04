@@ -51,7 +51,7 @@ opts = vl_argparse(opts, varargin) ;
 
 
 opts.train.expDir = fullfile('data', opts.expDirName);
-opts.imdbPath  = fullfile(opts.imdbDir, 'roi_imdb.mat');
+opts.imdbPath  = fullfile(opts.imdbDir, 'roi_imdb_start.mat');
 genDir(opts.imdbDir) ;
 
 %% Sampling training data
@@ -68,10 +68,10 @@ opts.train.derOutputs = {'losscls', 1} ;
 end
 %% Initializing MDNet
 K = numel(imdb.images.name);
-net = mdnet_roi_init_train(opts, K);
-%net = load(opts.netFile);
-%net = net.net;
-%net = dagnn.DagNN.loadobj(net);
+%net = mdnet_roi_init_train(opts, K);
+net = load(opts.netFile);
+net = net.net;
+net = dagnn.DagNN.loadobj(net);
 
 %% Training MDNet
 % minibatch options
@@ -91,10 +91,10 @@ bopts.scale_factor = opts.sampling.scale_factor;
 bopts.scale_range  = 10;
 bopts.trans_range  = 2;
 
-[net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
-                          getBatch(bopts,i,k,b), ...
-                          opts.train) ;
-
+%[net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
+%                          getBatch(bopts,i,k,b), ...
+%                          opts.train) ;
+%
 % --------------------------------------------------------------------
 %                                                               Deploy
 % --------------------------------------------------------------------

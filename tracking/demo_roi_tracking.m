@@ -13,19 +13,28 @@ addpath('pretraining');
 addpath('tracking');
 addpath('utils');
 addpath('pretraining/bbox_functions');
-conf = genConfig('otb','Diving');
-% conf = genConfig('Dancer','ball1');
+%conf = genConfig('otb','Matrix');
+conf = genConfig('vot2014','fish1');
 
 switch(conf.dataset)
     case 'otb'
         %net = fullfile('models','net-deployed_shared_bbox_relu_sub7_fixed_test-epoch11.mat');
         %net = fullfile('models','net-deployed_sub3_oneas_large.mat');
-        net = fullfile('models','net-deployed_vot-otb_sub3_oneas_large_nopw_epoch4.mat');
-
+        %net = fullfile('models', 'net-deployed_sub3_oneas_large_nopw_epoch3');
+        %net = fullfile('models','net-deployed_vot-otb_sub3_oneas_large_nopw_epoch4.mat');
+        %net = fullfile('models', 'net-deployed_shared_bbox_relu_new_start.mat');
+		%net = fullfile('models', 'net-deployed_otb-vot14_sub3_oneas_large_nopw_validate2-epoch4.mat');
+		 %net = fullfile('models', 'net-deployed_otb-vot14_sub3_oneas_large_nopw-epoch7.mat')
+		%net = fullfile('models', 'net-deployed_vot-otb_sub3_oneas_large_nopw_bothboundary_flip-epoch6.mat');
+        net = fullfile('models', 'net-deployed_vot-otb_start_epoch13.mat');
     case 'vot2014'
-        net = fullfile('models','mdnet_roi_otb-vot14.mat');
+        net = fullfile('models', 'net-deployed_sub3_oneas_large_nopw_epoch3');
+
+        %net = fullfile('models','mdnet_roi_otb-vot14.mat');
     case 'vot2015'
-        net = fullfile('models','mdnet_roi_otb-vot15.mat');
+
+        %net = fullfile('models', 'net-deployed_vot-otb_start_epoch13.mat');
+        %net = fullfile('models','mdnet_roi_otb-vot15.mat');
 end
 
 %ts_table = [{'dataset'},{'mdnet_init'},{'bbox_training'}, {'generate_examples'},...
