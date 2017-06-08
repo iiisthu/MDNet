@@ -156,7 +156,7 @@ for To = 2:nFrames;
     [window,target_crop, bboxes,R] = im_roi_crop(img, targetLoc, samples, opts.crop_mode, opts.crop_size, opts.crop_padding, 1, range , []);
     bboxes = single([ones(size(bboxes, 1), 1, 'single'), bboxes]');
     if opts.debug
-        %plot_image(3, window, 0.1, round(bboxes(2:end, :))');
+        plot_image(3, window, 0.1, round(bboxes(2:end, :))');
     end
     bboxes_ori = bboxes;
     if numel(opts.gpus) > 0
@@ -239,9 +239,9 @@ for To = 2:nFrames;
         end
     end
     fprintf('max probs: %.3f, target_score:%.3f\n', max(cprobs), target_score);
-    if opts.debug
-        %plot_image(6, uint8(window), 1, [target_crop;], round(bboxes_ori(2:end,:)'/16)+1);
-    end
+%    if opts.debug
+%        plot_image(6, uint8(window), 1, [target_crop;], round(bboxes_ori(2:end,:)')+1);
+%    end
     targetLoc = round(mean(targetLoc,1));
     targetLoc = max(1, targetLoc);
     [h,w, ~] = size(img);

@@ -56,9 +56,9 @@ opts.crop_padding = 0;
 opts.nmsThreshold = 0 ;
 opts.confThreshold = 0.5 ;
 opts.debug = false;
+opts.piecewise = false;
 % scaling policy
 opts.scale_factor = 1.05;
-opts.piecewise = 0;
 if opts.piecewise
 opts.derOutputs = {'losscls', 1, 'lossbbox', 1};
 else

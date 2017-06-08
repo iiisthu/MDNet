@@ -156,7 +156,7 @@ for t=1:opts.maxiter
         score_hneg((h-1)*opts.batchSize_hnm+1:h*opts.batchSize_hnm) = probs;
     end
     [score_sorted,ord] = sort(score_hneg,'descend');
-    %fprintf('max score: %.3f, min score: %.3f', score_hneg(ord(1)), score_hneg(ord(end)) );
+    fprintf('max score: %.3f, min score: %.3f', score_hneg(ord(1)), score_hneg(ord(end)) );
     hnegs = train_neg(hneg_start+ord(1:opts.batch_neg));
     im_hneg = new_neg_data(hnegs, :);
     hntime = toc(iter_time);
@@ -177,7 +177,7 @@ for t=1:opts.maxiter
          if opts.debug && t == opts.maxiter
              pos = batch(matched(matched <= opts.batch_pos), 2:end);
              neg = batch(matched(matched > opts.batch_pos), 2:end);
-             %plot_image(7, img_ori{l}, 0.1, pos, neg);
+             plot_image(7, img_ori{l}, 0.1, pos, neg);
          end
      end
     if opts.piecewise

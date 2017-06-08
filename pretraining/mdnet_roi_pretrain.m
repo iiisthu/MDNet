@@ -22,6 +22,16 @@ opts.modelPath = fullfile(opts.expDir, 'net-deployed_shared_bbox.mat');
 % The directory to store the RoIs for training MDNet.
 opts.imdbDir     = fullfile('models','data_vot-otb') ;
 opts.expDirName  =  'exp';
+opts.hardnegmining  = false;
+opts.imdbName = 'roi_imdb';
+opts.gpus = [];
+opts.intemidiate = false;
+opts.piecewise = 0;
+opts.domain_bbox = 1;
+opts.numFetchThreads = 2 ;
+opts.imdbPath  = fullfile(opts.imdbDir, 'roi_imdb_start.mat');
+opts = vl_argparse(opts, varargin) ;
+
 opts.sampling.crop_mode         = 'warp';
 opts.sampling.numFetchThreads   = 8 ;
 opts.sampling.posRange          = [0.7 1];
@@ -32,26 +42,21 @@ opts.sampling.posPerFrame       = 50;
 opts.sampling.negPerFrame       = 200;
 opts.sampling.scale_factor      = 1.05;
 opts.sampling.flip              = false;
-opts.sampling.val_ratio         = 0.99;
+opts.sampling.val_ratio         = 0.95;
 % fast rcnn parameters
 opts.train.batchSize        = 8 ;
 
-opts.train.numEpochs        = 20 ; % #cycles (#iterations/#domains)
+opts.train.numEpochs        = 100 ; % #cycles (#iterations/#domains)
 opts.train.learningRate     = 0.001*[0.001*ones(5,1);0.0001*ones(10,1)] ; % x10 for fc4-6
-opts.train.gpus = [2,3,4,6] ;
-%opts.train.gpus = [] ;
+opts.train.gpus = opts.gpus ;
 opts.train.numSubBatches = 1 ;
 opts.train.prefetch = false ; % does not help for two images in a batch
 opts.train.weightDecay = 0.0005 ;
-opts.piecewise = 0;
-opts.domain_bbox = 1;
-opts.numFetchThreads = 2 ;
-opts.train.numEpochs = numel(opts.train.learningRate) ;
-opts = vl_argparse(opts, varargin) ;
+opts.train.hardnegmining = opts.hardnegmining;
+
 
 
 opts.train.expDir = fullfile('data', opts.expDirName);
-opts.imdbPath  = fullfile(opts.imdbDir, 'roi_imdb_start.mat');
 genDir(opts.imdbDir) ;
 
 %% Sampling training data
@@ -68,10 +73,13 @@ opts.train.derOutputs = {'losscls', 1} ;
 end
 %% Initializing MDNet
 K = numel(imdb.images.name);
-%net = mdnet_roi_init_train(opts, K);
-net = load(opts.netFile);
-net = net.net;
-net = dagnn.DagNN.loadobj(net);
+if ~opts.intemidiate
+	net = mdnet_roi_init_train(opts, K);
+else
+	net = load(opts.netFile);
+	net = net.net;
+	net = dagnn.DagNN.loadobj(net);
+end
 
 %% Training MDNet
 % minibatch options
@@ -90,10 +98,11 @@ bopts.prefetch = opts.train.prefetch;
 bopts.scale_factor = opts.sampling.scale_factor;
 bopts.scale_range  = 10;
 bopts.trans_range  = 2;
-
-%[net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
-%                          getBatch(bopts,i,k,b), ...
-%                          opts.train) ;
+if ~ opts.intemidiate
+	[net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
+                          getBatch(bopts,i,k,b), ...
+                          opts.train) ;
+end
 %
 % --------------------------------------------------------------------
 %                                                               Deploy

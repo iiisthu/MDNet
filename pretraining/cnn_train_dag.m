@@ -17,8 +17,7 @@ opts.train = {} ;
 opts.val = {} ;
 opts.gpus = [] ;
 opts.prefetch = false ;
-opts.numEpochs = 300 ;
-opts.numCycles = 400;
+opts.numEpochs = 100 ;
 opts.learningRate = 0.001 ;
 opts.weightDecay = 0.0005 ;
 opts.momentum = 0.9 ;
@@ -28,7 +27,7 @@ opts.randomSeed = 0 ;
 opts.profile = false ;
 opts.parameterServer.method = 'mmap' ;
 opts.parameterServer.prefix = 'mcn' ;
-
+opts.hardnegmining = false;
 opts.derOutputs = {'objective', 1} ;
 opts.extractStatsFn = @extractStats ;
 opts.plotStatistics = true;
@@ -73,6 +72,32 @@ end
 net.vars(net.getVarIndex('x10')).precious = true ;
 net.vars(net.getVarIndex('x17')).precious = true ;
 net.vars(net.getVarIndex('predbbox')).precious = true ;
+
+params = opts ;
+params.learningRate = opts.learningRate(1) ;
+params.train = opts.train; % not shuffled yet
+params.val = opts.val ;
+params.imdb = imdb ;
+params.getBatch = getBatch ;
+params.frame_list = cell(numel(params.train),1);
+for k=1:numel(params.train)
+    nFrames = params.batchSize*params.numEpochs;
+    while(length(params.frame_list{k})<nFrames)
+        params.frame_list{k} = cat(1,params.frame_list{k},uint32(randperm(length(params.train{k})))');
+    end
+    params.frame_list{k} = params.frame_list{k}(1:nFrames);
+end
+params.nFrames = nFrames;
+params.frame_list_val = cell(numel(params.val),1);
+for k=1:numel(params.val)
+    nFrames = params.batchSize*params.numEpochs;
+    while(length(params.frame_list_val{k})<nFrames)
+        params.frame_list_val{k} = cat(1,params.frame_list_val{k},uint32(randperm(length(params.val{k})))');
+    end
+    params.frame_list_val{k} = params.frame_list_val{k}(1:nFrames);
+end
+params.nFrames_val = nFrames;
+disp(nFrames);
 for epoch=start+1:opts.numEpochs
 
   % Set the random seed based on the epoch and opts.randomSeed.
@@ -83,15 +108,7 @@ for epoch=start+1:opts.numEpochs
   prepareGPUs(opts, epoch == start+1) ;
 
   % Train for one epoch.
-  params = opts ;
   params.epoch = epoch ;
-  params.learningRate = opts.learningRate(min(epoch, numel(opts.learningRate))) ;
-  params.train = opts.train; % not shuffled yet
-  params.val = opts.val ;
-  params.imdb = imdb ;
-  params.getBatch = getBatch ;
-  params.frame_list = {};
-
   if numel(opts.gpus) <= 1
     [net, state] = processEpoch(net, state, params, 'train') ;
     [net, state] = processEpoch(net, state, params, 'val') ;
@@ -193,25 +210,21 @@ stats.num = 0 ; % return something even if subset = []
 stats.time = 0 ;
 
 
-% shuffle the frames for training
-nFrames = 0;
-if numel(params.frame_list) == 0
-params.frame_list = cell(numel(params.train),1);
-for k=1:numel(params.train)
-    nFrames = params.batchSize*params.numCycles;
-    while(length(params.frame_list{k})<nFrames)
-        params.frame_list{k} = cat(1,params.frame_list{k},uint32(randperm(length(params.train{k})))');
-    end
-    params.frame_list{k} = params.frame_list{k}(1:nFrames);
-end
+if strcmp(mode, 'train')
+frame_list = params.frame_list;
+step = params.batchSize;
+nFrames = params.nFrames;
+else
+frame_list = params.frame_list_val;
+step = params.batchSize;
+nFrames = params.nFrames_val;
 end
 
-
-
+disp(nFrames);
 start = tic ;
-for t = 1:params.batchSize:nFrames
-for k = 1:numel(params.frame_list)
-  subset = params.frame_list{k};
+t = epoch *step;
+for k = 1:numel(frame_list)
+  subset = frame_list{k};
   start = tic ; 
   fprintf('%s: epoch %02d: seq %02d: %3d/%3d:', mode, epoch, k, ...
           fix((t-1)/params.batchSize)+1, ceil(numel(subset)/params.batchSize)) ;
@@ -284,7 +297,6 @@ for k = 1:numel(params.frame_list)
     fprintf(' %s: %.3f', f, stats.(f)) ;
   end
   fprintf('\n') ;
-end
 end
 
 % Save back to state.

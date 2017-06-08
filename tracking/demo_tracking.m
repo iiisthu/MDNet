@@ -7,16 +7,16 @@
 
 clear;
 
-conf = genConfig('otb','Matrix');
+conf = genConfig('otb','Box');
 % conf = genConfig('vot2015','ball1');
 
 switch(conf.dataset)
     case 'otb'
-        net = fullfile('models','mdnet_vot-otb.mat');
+        net = fullfile('models','mdnet_vot-otb_mytrain.mat');
     case 'vot2014'
-        net = fullfile('models','mdnet_otb-vot14.mat');
+        net = fullfile('models','mdnet_otb-vot14_mytrain.mat');
     case 'vot2015'
-        net = fullfile('models','mdnet_otb-vot15.mat');
+        net = fullfile('models','mdnet_otb-vot15_mytrain.mat');
 end
 
 ts_table = [{'dataset'},{'mdnet_init'},{'bbox_training'}, {'generate_examples'},...

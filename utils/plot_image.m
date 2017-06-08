@@ -1,5 +1,6 @@
 function plot_image(id, img, pausesec, varargin)
    figure(id);
+   img = uint8(img-mean(img(:)) + 128);
    imshow(img);
    hold on;
    colors = ['r', 'b', 'k', 'y'];

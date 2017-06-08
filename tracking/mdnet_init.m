@@ -60,7 +60,7 @@ opts.scale_factor = 1.05;
 opts.nSamples = 256;
 opts.trans_f = 0.6; % translation std: mean(width,height)*trans_f/2
 opts.scale_f = 1; % scaling std: scale_factor^(scale_f/2)
-
+opts.debug = true;
 % set image size
 opts.imgSize = size(image);
 

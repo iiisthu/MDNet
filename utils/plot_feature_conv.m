@@ -1,5 +1,6 @@
 function plot_feature_conv(id, img, pausesec, tt, varargin)
    figure(id);
+   img = uint8(img - mean(img(:)) + 128);
    [w,h,c] = size(img);
    a = min(c,90);
    feat = reshape(img, w, h, 1, c);
