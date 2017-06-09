@@ -97,7 +97,6 @@ for k=1:numel(params.val)
     params.frame_list_val{k} = params.frame_list_val{k}(1:nFrames);
 end
 params.nFrames_val = nFrames;
-disp(nFrames);
 for epoch=start+1:opts.numEpochs
 
   % Set the random seed based on the epoch and opts.randomSeed.

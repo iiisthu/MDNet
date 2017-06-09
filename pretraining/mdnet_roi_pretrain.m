@@ -29,7 +29,7 @@ opts.intemidiate = false;
 opts.piecewise = 0;
 opts.domain_bbox = 1;
 opts.numFetchThreads = 2 ;
-opts.imdbPath  = fullfile(opts.imdbDir, 'roi_imdb_start.mat');
+opts.visualize = false;
 opts = vl_argparse(opts, varargin) ;
 
 opts.sampling.crop_mode         = 'warp';
@@ -42,7 +42,7 @@ opts.sampling.posPerFrame       = 50;
 opts.sampling.negPerFrame       = 200;
 opts.sampling.scale_factor      = 1.05;
 opts.sampling.flip              = false;
-opts.sampling.val_ratio         = 0.95;
+opts.sampling.val_ratio         = 0.99;
 % fast rcnn parameters
 opts.train.batchSize        = 8 ;
 
@@ -59,6 +59,7 @@ opts.train.hardnegmining = opts.hardnegmining;
 opts.train.expDir = fullfile('data', opts.expDirName);
 genDir(opts.imdbDir) ;
 
+opts.imdbPath  = fullfile(opts.imdbDir, [opts.imdbName,'.mat']);
 %% Sampling training data
 if exist(opts.imdbPath,'file')
     load(opts.imdbPath) ;
@@ -86,18 +87,19 @@ end
 bopts.gpus             = opts.train.gpus;
 bopts.batch_pos        = 32*4;
 bopts.batch_neg        = 96*4;
-bopts.crop_size        = 800;
+bopts.crop_size        = 107*5;
 bopts.crop_padding     = opts.sampling.crop_padding;
 bopts.crop_mode     = opts.sampling.crop_mode;
 bopts.bgLabel = 1;
 bopts.piecewise = opts.piecewise;
-bopts.visualize = 0;
+bopts.visualize = opts.visualize;
 bopts.interpolation = net.meta.normalization.interpolation;
 bopts.numThreads = opts.numFetchThreads;
 bopts.prefetch = opts.train.prefetch;
 bopts.scale_factor = opts.sampling.scale_factor;
-bopts.scale_range  = 10;
-bopts.trans_range  = 2;
+%bopts.scale_range  = 10;
+%bopts.trans_range  = 2;
+bopts.crop_range   = 2.5;
 if ~ opts.intemidiate
 	[net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
                           getBatch(bopts,i,k,b), ...
