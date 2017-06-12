@@ -58,7 +58,7 @@ for i=1:length(imgs)
     niou = [];
     while(size(neg_examples,1)<opts.negPerFrame)
         neg = genSamples(targetLoc, opts.negPerFrame*2,...
-            imgSize, opts.scale_factor, 2, 5, true);
+            imgSize, opts.scale_factor, 0.8, 5, true);
         r = overlap_ratio(neg,targetLoc);
         neg = neg(r>=opts.negRange(1) & r<opts.negRange(2),:);
         r = r(r >= opts.negRange(1) & r < opts.negRange(2));        
