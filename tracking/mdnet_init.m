@@ -16,7 +16,7 @@ opts.net_file = net;
 opts.batchSize_test = 256; % <- reduce it in case of out of gpu memory
 
 % bounding box regression
-opts.bbreg = true;
+opts.bbreg = false;
 opts.bbreg_nSamples = 1000;
 
 % learning policy
@@ -60,7 +60,7 @@ opts.scale_factor = 1.05;
 opts.nSamples = 256;
 opts.trans_f = 0.6; % translation std: mean(width,height)*trans_f/2
 opts.scale_f = 1; % scaling std: scale_factor^(scale_f/2)
-opts.debug = true;
+opts.debug = false;
 % set image size
 opts.imgSize = size(image);
 

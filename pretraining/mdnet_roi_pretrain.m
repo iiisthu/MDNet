@@ -29,7 +29,7 @@ opts.intemidiate = false;
 opts.piecewise = 0;
 opts.domain_bbox = 1;
 opts.numFetchThreads = 2 ;
-opts.visualize = false;
+opts.visualize = true;
 opts = vl_argparse(opts, varargin) ;
 
 opts.sampling.crop_mode         = 'warp';
@@ -87,7 +87,7 @@ end
 bopts.gpus             = opts.train.gpus;
 bopts.batch_pos        = 32*4;
 bopts.batch_neg        = 96*4;
-bopts.crop_size        = 107*5;
+bopts.crop_size        = 107*7;
 bopts.crop_padding     = opts.sampling.crop_padding;
 bopts.crop_mode     = opts.sampling.crop_mode;
 bopts.bgLabel = 1;
@@ -99,7 +99,7 @@ bopts.prefetch = opts.train.prefetch;
 bopts.scale_factor = opts.sampling.scale_factor;
 %bopts.scale_range  = 10;
 %bopts.trans_range  = 2;
-bopts.crop_range   = 2.5;
+bopts.crop_range   = 3.5;
 if ~ opts.intemidiate
 	[net,info] = cnn_train_dag(net, imdb, @(i,k,b) ...
                           getBatch(bopts,i,k,b), ...

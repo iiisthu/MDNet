@@ -50,7 +50,9 @@ end
 n_pos = n_pos + size(pos_data{i},1);
 n_neg = n_neg + size(neg_data{i},1);
 new_pos_data = cat(1,new_pos_data, [i*ones(size(pos_data{i}, 1),1) pos_data{i}]);
-new_neg_data = cat(1,new_neg_data, [i*ones(size(neg_data{i}, 1),1) neg_data{i}]);
+if numel(neg_data{i}) > 0
+    new_neg_data = cat(1,new_neg_data, [i*ones(size(neg_data{i}, 1),1) neg_data{i}]);
+end
 end
 
 
@@ -174,9 +176,10 @@ for t=1:opts.maxiter
          label_batch = [label_batch; 2*ones(numel(find(matched <= opts.batch_pos)), 1, 'single'); ones(numel(find(matched > opts.batch_pos)), 1, 'single')];
          bbox_batch = cat(1,bbox_batch, batch(matched, :));
          target_batch = cat(1,target_batch, targetLoc{l});
-         if opts.debug && t == opts.maxiter
+         if opts.debug %&& t == opts.maxiter
              pos = batch(matched(matched <= opts.batch_pos), 2:end);
              neg = batch(matched(matched > opts.batch_pos), 2:end);
+            
              plot_image(7, img_ori{l}, 0.1, pos, neg);
          end
      end
@@ -231,7 +234,7 @@ for t=1:opts.maxiter
     probs = squeeze(gather(net.vars(net.getVarIndex('probcls')).value)) ;
     if opts.debug && ( t == 1 || t == opts.maxiter)
         features = squeeze(gather(net.vars(net.getVarIndex('xRP')).value)) ;
-        plot_feature_conv(8, features(:,:,2,:), 0.1, 'Training: bbox fmap');
+        %plot_feature_conv(8, features(:,:,2,:), 0.1, 'Training: bbox fmap');
     end
     loss_cls(t) = gather(loss)/opts.batchSize ;
     if opts.piecewise

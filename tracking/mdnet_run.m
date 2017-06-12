@@ -62,7 +62,7 @@ pos_examples = pos_examples(randsample(end,min(opts.nPos_init,end)),:);
 
 %neg_examples = [gen_samples('uniform', targetLoc, opts.nNeg_init, opts, 1, 10);...
 %    gen_samples('whole', targetLoc, opts.nNeg_init, opts)];
-neg_examples = [gen_samples('uniform', targetLoc, opts.nNeg_init*2, opts, 1, 10)];
+neg_examples = [gen_samples('uniform', targetLoc, opts.nNeg_init*2, opts, 1, 5)];
     r = overlap_ratio(neg_examples,targetLoc);
 neg_examples = neg_examples(r<opts.negThr_init,:);
 neg_examples = neg_examples(randsample(end,min(opts.nNeg_init,end)),:);
@@ -109,12 +109,12 @@ total_pos_data = cell(1,1,1,nFrames);
 total_neg_data = cell(1,1,1,nFrames);
 % total_pos_data_export = cell(1,1,1,nFrames);
 % total_neg_data_export = cell(1,1,1,nFrames);
-neg_examples = gen_samples('uniform', targetLoc, opts.nNeg_update*2, opts, 2, 5);
+neg_examples = gen_samples('uniform', targetLoc, opts.nNeg_update*2, opts, 1, 5);
 r = overlap_ratio(neg_examples,targetLoc);
 neg_examples = neg_examples(r<opts.negThr_init,:);
 neg_examples = neg_examples(randsample(end,min(opts.nNeg_update,end)),:);
 
-examples = [pos_examples; neg_examples];
+examples = [pos_examples(1:50,:); neg_examples];
 pos_idx = 1:size(pos_examples,1);
 neg_idx = (1:size(neg_examples,1)) + size(pos_examples,1);
 
@@ -185,7 +185,7 @@ for To = 2:nFrames;
         pos_examples = pos_examples(r>opts.posThr_update,:);
         pos_examples = pos_examples(randsample(end,min(opts.nPos_update,end)),:);
         
-        neg_examples = gen_samples('uniform', targetLoc, opts.nNeg_update*2, opts, 2, 5);
+        neg_examples = gen_samples('uniform', targetLoc, opts.nNeg_update*2, opts, 1, 5);
         r = overlap_ratio(neg_examples,targetLoc);
         neg_examples = neg_examples(r<opts.negThr_update,:);
         neg_examples = neg_examples(randsample(end,min(opts.nNeg_update,end)),:);

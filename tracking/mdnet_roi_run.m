@@ -41,7 +41,7 @@ r = roi_overlap_ratio(pos_examples,targetLoc);
 pos_examples = pos_examples(r>opts.posThr_init,:);
 pos_examples = pos_examples(randsample(end,min(opts.nPos_init,end)),:);
 
-neg_examples = [roi_gen_samples('uniform', targetLoc, opts.nNeg_init*2, opts, 1, 10);];
+neg_examples = [roi_gen_samples('uniform', targetLoc, opts.nNeg_init*2, opts, 1, 5);];
     %roi_gen_samples('whole', targetLoc, opts.nNeg_init, opts)];
 %neg_examples = [roi_gen_samples('uniform', targetLoc, opts.nNeg_init,opts, 1, 10);...
 %	roi_gen_samples('uniform', targetLoc, opts.nNeg_init, opts, 1, 10)];
@@ -50,14 +50,15 @@ neg_examples = neg_examples(r<opts.negThr_init,:);
 neg_examples = neg_examples(randsample(end,min(opts.nNeg_init,end)),:);
 
 
-neg_examples_update = roi_gen_samples('uniform', targetLoc, opts.nNeg_update*2, opts, 2, 5);
+neg_examples_update = roi_gen_samples('uniform', targetLoc, opts.nNeg_update*2, opts, 1, 5);
 r = roi_overlap_ratio(neg_examples_update,targetLoc);
 neg_examples_update = neg_examples_update(r<opts.negThr_init,:);
 neg_examples_update = neg_examples_update(randsample(end,min(opts.nNeg_update,end)),:);
 %% Learning CNN
 crop_trans_f = 2;
 crop_scale_f = 5;
-range = crop_trans_f + opts.scale_factor^crop_scale_f;
+%range = crop_trans_f + opts.scale_factor^crop_scale_f;
+range = opts.crop_range;
 %range = 50;
 [img_crop,target_crop, bboxes,R] = im_roi_crop(img, targetLoc, [pos_examples; neg_examples; neg_examples_update], opts.crop_mode, opts.crop_size, opts.crop_padding, 1, range , []);
 fprintf('  training cnn...\n');
@@ -69,7 +70,7 @@ net_conv.mode = 'test';
 net_conv.eval({'input', window});
 feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ; 
 if opts.debug
-    plot_feature_conv(2, feat(:,:,1), 0.1, sprintf('Whole feature map of frame %d', 1), round(bboxes(1,:)/16)+1);
+    plot_feature_conv(2, feat(:,:,1), 0.1, sprintf('Whole feature map of frame %d', 1), round(bboxes(1:size(pos_examples,1),:)/16)-1);
 end
 net_fc = mdnet_roi_finetune_hnm(net_fc, {feat}, {uint8(img_crop+128)}, {target_crop}, {bboxes(1:size(pos_examples, 1),:)}, {bboxes(1+size(pos_examples,1):size(pos_examples,1) + size(neg_examples),:)},...
     'maxiter',opts.maxiter_init,'learningRate',opts.learningRate_init, ...
@@ -151,7 +152,8 @@ for To = 2:nFrames;
     samples = roi_gen_samples('gaussian', targetLoc, opts.nSamples, opts, trans_f, scale_f);
     crop_trans_f = max(crop_trans_f, trans_f);
     crop_scale_f = max(crop_scale_f, scale_f); 
-    range = (crop_trans_f + opts.scale_factor^crop_scale_f);
+    %range = (crop_trans_f + opts.scale_factor^crop_scale_f);
+    range = opts.crop_range;
     % evaluate the candidates
     [window,target_crop, bboxes,R] = im_roi_crop(img, targetLoc, samples, opts.crop_mode, opts.crop_size, opts.crop_padding, 1, range , []);
     bboxes = single([ones(size(bboxes, 1), 1, 'single'), bboxes]');
@@ -167,7 +169,7 @@ for To = 2:nFrames;
     
     feat = squeeze(gather(net_conv.vars(net_conv.getVarIndex('x10')).value)) ;
     if opts.debug && mod(To, 5) == 1
-       plot_feature_conv(4, feat(:,:,1), 0.1, sprintf('Whole Feature map of frame %d', To), round(bboxes_ori(2:end,:)'/16)+1);
+       plot_feature_conv(4, feat(:,:,1), 0.1, sprintf('Whole Feature map of frame %d', To), round(bboxes_ori(2:end,:)'/16)-1);
     end
     if numel(opts.gpus) > 0
         feat = gpuArray(feat);
@@ -181,7 +183,7 @@ for To = 2:nFrames;
     
     features = squeeze(gather(net_fc.vars(net_fc.getVarIndex('xRP')).value)) ;
     if opts.debug && mod(To, 5) == 1
-       plot_feature_conv(5, features(:,:,1,1:90), 1, sprintf('Bbox fmap of frame %d', To));
+       %plot_feature_conv(5, features(:,:,1,1:90), 1, sprintf('Bbox fmap of frame %d', To));
     end
     probs = squeeze(gather(net_fc.vars(net_fc.getVarIndex('probcls')).value)) ;
     cprobs = probs(2,:);
@@ -246,11 +248,13 @@ for To = 2:nFrames;
     targetLoc = max(1, targetLoc);
     [h,w, ~] = size(img);
     targetLoc = [targetLoc(1:2), targetLoc(3:4)-targetLoc(1:2) + 1];
-    targetLoc(1) = max(1,min(w- targetLoc(3)/2, targetLoc(1)));
-    targetLoc(2) = max(1,min(h- targetLoc(4)/2, targetLoc(2)));
-    targetLoc(3) = min(w, targetLoc(1) + targetLoc(3) - 1); 
-    targetLoc(4) = min(h, targetLoc(2) + targetLoc(4) - 1); 
-    result(To,:) = [targetLoc(1:2), targetLoc(3:4) - targetLoc(1:2) + 1];
+    %targetLoc(1) = max(1,min(w- targetLoc(3)/2, targetLoc(1)));
+    %targetLoc(2) = max(1,min(h- targetLoc(4)/2, targetLoc(2)));
+    %targetLoc(3) = min(w, targetLoc(1) + targetLoc(3) - 1); 
+    %targetLoc(4) = min(h, targetLoc(2) + targetLoc(4) - 1); 
+    %result(To,:) = [targetLoc(1:2), targetLoc(3:4) - targetLoc(1:2) + 1];
+    result(To,:) = targetLoc;
+    targetLoc = [targetLoc(1:2), targetLoc(1:2) + targetLoc(3:4) - 1];
     % extend search space in case of failure
     if(target_score <= opts.scoreThr)
         trans_f = min(1.5, 1.1*trans_f);
@@ -268,11 +272,12 @@ for To = 2:nFrames;
         if size(pos_examples, 1) == 0
             continue;
         end
-        neg_examples = roi_gen_samples('uniform', targetLoc, opts.nNeg_update*2, opts, 2, 5);
+        neg_examples = roi_gen_samples('uniform', targetLoc, opts.nNeg_update*2, opts, 1, 5);
         r = roi_overlap_ratio(neg_examples, targetLoc);
         neg_examples = neg_examples(r<opts.negThr_update,:);
         neg_examples = neg_examples(randsample(end,min(opts.nNeg_update,end)),:);
-        range = (2 + opts.scale_factor^5);
+        %range = (2 + opts.scale_factor^5);
+        range = opts.crop_range;
     	[img_crop, target_crop, bboxes, R] = im_roi_crop(img, targetLoc, [pos_examples; neg_examples], opts.crop_mode, opts.crop_size, opts.crop_padding, 1, range, []);
         if numel(opts.gpus) > 0
            window = gpuArray(img_crop) ;
@@ -289,11 +294,14 @@ for To = 2:nFrames;
 %       total_pos_data_export{To} = total_pos_data{To};
 %       total_neg_data_export{To} = total_neg_data{To};
         success_frames = [success_frames, To];
+
+        if(numel(success_frames)>opts.nFrames_short)
+            total_neg_data{success_frames(end-opts.nFrames_short)} = single([]);
+        end
         if(numel(success_frames)>opts.nFrames_long)
             total_pos_data{success_frames(end-opts.nFrames_long)} = single([]);
             total_img_data{success_frames(end-opts.nFrames_long)} = single([]);
             total_roi_data{success_frames(end-opts.nFrames_long)} = single([]);
-            total_neg_data{success_frames(end-opts.nFrames_long)} = single([]);
             total_imgroi_data{success_frames(end-opts.nFrames_long)} = single([]);
         end
     else
@@ -312,20 +320,16 @@ for To = 2:nFrames;
             pos_data = total_pos_data(success_frames(max(1,end-opts.nFrames_short+1):end));
             img_data = total_img_data(success_frames(max(1,end-opts.nFrames_short+1):end));
             roi_data = total_roi_data(success_frames(max(1,end-opts.nFrames_short+1):end));
-            neg_data = total_neg_data(success_frames(max(1,end-opts.nFrames_short+1):end));
             imgori_data = total_imgori_data(success_frames(max(1,end-opts.nFrames_short+1):end));
+            neg_data = total_neg_data(success_frames(max(1,end-opts.nFrames_short+1):end));
         else % long-term update
             pos_data = total_pos_data(success_frames(max(1,end-opts.nFrames_long+1):end));
             img_data = total_img_data(success_frames(max(1,end-opts.nFrames_long+1):end));
             roi_data = total_roi_data(success_frames(max(1,end-opts.nFrames_long+1):end));
-            neg_data = total_neg_data(success_frames(max(1,end-opts.nFrames_long+1):end));
             imgori_data = total_imgori_data(success_frames(max(1,end-opts.nFrames_long+1):end));
+            neg_data = total_neg_data(success_frames(max(1,end-opts.nFrames_long+1):end));
         end
-        
 %         fprintf('\n');
-        crop_trans_f = 2;
-        crop_scale_f = 5; 
-        sus = success_frames(max(1,end-numel(pos_data)+1):end);
         % generate batch
         img_update = cell(floor(numel(img_data)/opts.batchimg) + 1, 1);
         imgori_update = cell(floor(numel(imgori_data)/opts.batchimg) + 1, 1);

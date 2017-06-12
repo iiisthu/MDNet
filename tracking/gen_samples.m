@@ -27,6 +27,7 @@ switch (type)
         samples(:,3:4) = samples(:,3:4) .* repmat(opts.scale_factor.^(scale_f*max(-1,min(1,0.5*randn(n,1)))),1,2);
     case 'uniform'
         samples(:,1:2) = samples(:,1:2) + trans_f * round(mean(bb(3:4))) * (rand(n,2)*2-1);
+        %samples(:,1:2) = samples(:,1:2) + trans_f * [bb(3) * (rand(n,1)*2-1) bb(4)*(rand(n,1)*2 - 1)];
         samples(:,3:4) = samples(:,3:4) .* repmat(opts.scale_factor.^(scale_f*(rand(n,1)*2-1)),1,2);
     case 'uniform_aspect'
         samples(:,1:2) = samples(:,1:2) + trans_f * repmat(bb(3:4),n,1) .* (rand(n,2)*2-1);

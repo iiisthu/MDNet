@@ -27,7 +27,7 @@ opts.batchimg = 100;
 opts.maxiter_init = 50;
 %opts.learningRate_init = 0.0001 * [ones(opts.maxiter_init/2,1);0.1*ones(opts.maxiter_init/2,1)]; % x10 for fc6
 opts.learningRate_init = 0.0001 * [ones(opts.maxiter_init,1)]; % x10 for fc6
-opts.scoreThr = 0.5;
+opts.scoreThr = 0.7;
 
 opts.nPos_init = 500;
 opts.nNeg_init = 5000;
@@ -50,14 +50,15 @@ opts.nFrames_long = 100; % long-term period
 opts.nFrames_short = 20; % short-term period
 
 % cropping policy
-opts.crop_size = 800;
+opts.crop_size = 107*5;
+opts.crop_range = 2.5;
+% scaling policy
 opts.crop_mode = 'wrap';
 opts.crop_padding = 0;
-opts.nmsThreshold = 0 ;
+%opts.nmsThreshold = 0 ;
 opts.confThreshold = 0.5 ;
 opts.debug = false;
 opts.piecewise = false;
-% scaling policy
 opts.scale_factor = 1.05;
 if opts.piecewise
 opts.derOutputs = {'losscls', 1, 'lossbbox', 1};
